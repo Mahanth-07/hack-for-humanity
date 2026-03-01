@@ -1,0 +1,61 @@
+{
+  "forest_smoke_flame": {
+    "riskScore": 93,
+    "severity": "severe",
+    "threatLevel": "severe",
+    "priorityScore": 201,
+    "rank": 1,
+    "rankWithinSeverity": 1,
+    "factors": [
+      { "key": "compound:smoke_and_flame", "weight": 24, "detail": "Smoke and flame co-occur in current window" },
+      { "key": "event:active_fire", "weight": 52.2, "detail": "Event contribution for active_fire" },
+      { "key": "event:smoke", "weight": 35.1, "detail": "Event contribution for smoke" },
+      { "key": "region:forest_multiplier", "weight": 16.8, "detail": "Region multiplier adjustment for forest" },
+      { "key": "trend:smoke_increasing", "weight": 10, "detail": "smoke count increased from 1 to 3" }
+    ],
+    "recommendedActions": [
+      "Dispatch response team immediately",
+      "Escalate to incident command",
+      "Notify relevant authority now",
+      "Dispatch fire response resources"
+    ]
+  },
+  "riverbank_oil_sheen": {
+    "riskScore": 67,
+    "severity": "high",
+    "threatLevel": "high",
+    "priorityScore": 132,
+    "rank": 2,
+    "rankWithinSeverity": 1,
+    "factors": [
+      { "key": "event:oil_sheen", "weight": 58, "detail": "Event contribution for oil_sheen" },
+      { "key": "compound:oil_sheen_riverbank", "weight": 16, "detail": "Oil sheen detected in riverbank region" },
+      { "key": "region:riverbank_multiplier", "weight": 18, "detail": "Region multiplier adjustment for riverbank" }
+    ],
+    "recommendedActions": [
+      "Dispatch response team immediately",
+      "Escalate to incident command",
+      "Notify relevant authority now",
+      "Notify environmental compliance or park ranger"
+    ]
+  },
+  "roadway_person_vehicle": {
+    "riskScore": 59,
+    "severity": "high",
+    "threatLevel": "moderate",
+    "priorityScore": 116,
+    "rank": 3,
+    "rankWithinSeverity": 2,
+    "factors": [
+      { "key": "event:person_on_roadway", "weight": 42, "detail": "Event contribution for person_on_roadway" },
+      { "key": "event:vehicle", "weight": 20, "detail": "Event contribution for vehicle" },
+      { "key": "compound:person_near_vehicle", "weight": 16, "detail": "Person near vehicle in roadway context" }
+    ],
+    "recommendedActions": [
+      "Dispatch response team immediately",
+      "Escalate to incident command",
+      "Notify relevant authority now",
+      "Notify traffic operations and roadway dispatch"
+    ]
+  }
+}

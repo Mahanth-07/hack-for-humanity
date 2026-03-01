@@ -6,6 +6,7 @@ import { openai } from "../../replit_integrations/audio/client";
 import { broadcast } from "../../index";
 import { assessRisk, rankAssessments, Detection, ModelWindow, RiskFactor } from "../risk-analysis/engine";
 import { defaultRiskConfig } from "../risk-analysis/config";
+import { triggerRobocall } from "../robocaller/trigger";
 
 const router = Router();
 
@@ -223,7 +224,7 @@ If no threat is detected, return detectionType "none" and urgency "none". Still 
             .orderBy(desc(incidents.createdAt));
           const duplicate = existingActiveIncidents.find(
             (inc) =>
-              inc.title === existingTitlePrefix &&
+              inc.title.includes(`— ${camera.name}`) &&
               new Date(inc.createdAt) > tenMinutesAgo,
           );
 
@@ -287,6 +288,22 @@ If no threat is detected, return detectionType "none" and urgency "none". Still 
               .update(cameraDetections)
               .set({ incidentId: incident.id })
               .where(eq(cameraDetections.id, detection.id));
+
+            try {
+              triggerRobocall(incident.id, {
+                detectionType: aiDetection.detectionType,
+                confidence: aiDetection.confidence || 0,
+                sceneContext: aiDetection.sceneContext || "",
+                humanLifePresent: aiDetection.humanLifePresent ?? false,
+                inanimateObjects: aiDetection.inanimateObjects || "",
+                description: aiDetection.description || "",
+                severity: newSeverity,
+                location: camera.location || "Unknown",
+                cameraName: camera.name,
+              });
+            } catch (err) {
+              console.error("Failed to trigger robocall:", err);
+            }
           } // end else (new incident)
 
           // Immediately score / re-score the incident and broadcast updated rankings

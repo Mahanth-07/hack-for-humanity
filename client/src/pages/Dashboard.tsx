@@ -1,11 +1,12 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-// @ts-ignore – no type declarations bundled with react-simple-maps
-import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { Link } from "wouter";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -14,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useUpload } from "@/hooks/use-upload";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
+  AlertCircle,
   Phone,
   Camera,
   Users,
@@ -35,22 +37,7 @@ import {
   Clock,
   X,
   Save,
-  UserPlus,
-  Flame,
-  ScanEye,
-  Maximize2,
-  Minimize2,
-  User,
-  PawPrint,
-  Box,
-  Building2,
-  Car,
-  Droplets,
-  Swords,
-  FlaskConical,
-  HeartPulse,
-  Leaf,
-  CircleAlert,
+  UserPlus
 } from "lucide-react";
 
 type Incident = {
@@ -61,19 +48,6 @@ type Incident = {
   status: "active" | "resolved" | "escalated";
   location?: string;
   coordinates?: { lat: number; lng: number };
-  createdAt: string;
-  riskRank?: number;
-  riskScore?: number | null;
-  priorityScore?: number | null;
-};
-
-type RiskAssessment = {
-  id: number;
-  incidentId: number;
-  riskScore: number;
-  severity?: "low" | "medium" | "high" | "severe" | null;
-  threatLevel?: "low" | "moderate" | "high" | "severe" | null;
-  priorityScore?: number | null;
   createdAt: string;
 };
 
@@ -92,7 +66,6 @@ type Contact = {
   role: string;
   priority: number;
   isActive: boolean;
-  metadata?: { location?: string; [key: string]: unknown };
   createdAt: string;
 };
 
@@ -141,113 +114,21 @@ const ROLE_COLORS: Record<string, string> = {
   coordinator: "bg-purple-500/20 text-purple-400 border-purple-500/30",
 };
 
-// Lat/lng coordinates for each valid US city (for real map pin placement)
-const CITY_COORDS: Record<string, [number, number]> = {
-  "New York, NY": [-74.006, 40.7128],
-  "Los Angeles, CA": [-118.2437, 34.0522],
-  "Chicago, IL": [-87.6298, 41.8781],
-  "Houston, TX": [-95.3698, 29.7604],
-  "Phoenix, AZ": [-112.074, 33.4484],
-  "Philadelphia, PA": [-75.1652, 39.9526],
-  "San Antonio, TX": [-98.4936, 29.4241],
-  "San Diego, CA": [-117.1611, 32.7157],
-  "Dallas, TX": [-96.797, 32.7767],
-  "San Jose, CA": [-121.8863, 37.3382],
-  "Austin, TX": [-97.7431, 30.2672],
-  "Jacksonville, FL": [-81.6557, 30.3322],
-  "Fort Worth, TX": [-97.3308, 32.7555],
-  "Columbus, OH": [-82.9988, 39.9612],
-  "Charlotte, NC": [-80.8431, 35.2271],
-  "Indianapolis, IN": [-86.1581, 39.7684],
-  "San Francisco, CA": [-122.4194, 37.7749],
-  "Seattle, WA": [-122.3321, 47.6062],
-  "Denver, CO": [-104.9903, 39.7392],
-  "Nashville, TN": [-86.7816, 36.1627],
-  "Oklahoma City, OK": [-97.5164, 35.4676],
-  "El Paso, TX": [-106.4850, 31.7619],
-  "Washington, DC": [-77.0369, 38.9072],
-  "Boston, MA": [-71.0589, 42.3601],
-  "Las Vegas, NV": [-115.1398, 36.1699],
-  "Memphis, TN": [-90.0490, 35.1495],
-  "Louisville, KY": [-85.7585, 38.2527],
-  "Portland, OR": [-122.6784, 45.5051],
-  "Baltimore, MD": [-76.6122, 39.2904],
-  "Milwaukee, WI": [-87.9065, 43.0389],
-  "Albuquerque, NM": [-106.6504, 35.0844],
-  "Tucson, AZ": [-110.9747, 32.2226],
-  "Fresno, CA": [-119.7871, 36.7378],
-  "Sacramento, CA": [-121.4944, 38.5816],
-  "Mesa, AZ": [-111.8315, 33.4152],
-  "Kansas City, MO": [-94.5786, 39.0997],
-  "Atlanta, GA": [-84.388, 33.749],
-  "Omaha, NE": [-95.9345, 41.2565],
-  "Colorado Springs, CO": [-104.8214, 38.8339],
-  "Raleigh, NC": [-78.6382, 35.7796],
-  "Miami, FL": [-80.1918, 25.7617],
-  "Long Beach, CA": [-118.1937, 33.7701],
-  "Virginia Beach, VA": [-75.9779, 36.8529],
-  "Minneapolis, MN": [-93.2650, 44.9778],
-  "Tampa, FL": [-82.4572, 27.9506],
-  "New Orleans, LA": [-90.0715, 29.9511],
-  "Arlington, TX": [-97.1081, 32.7357],
-  "Bakersfield, CA": [-119.0187, 35.3733],
-  "Honolulu, HI": [-157.8583, 21.3069],
-  "Anaheim, CA": [-117.9145, 33.8353],
-};
-
-// Validated US city locations — only these exact values are accepted
-const VALID_LOCATIONS = [
-  "New York, NY", "Los Angeles, CA", "Chicago, IL", "Houston, TX", "Phoenix, AZ",
-  "Philadelphia, PA", "San Antonio, TX", "San Diego, CA", "Dallas, TX", "San Jose, CA",
-  "Austin, TX", "Jacksonville, FL", "Fort Worth, TX", "Columbus, OH", "Charlotte, NC",
-  "Indianapolis, IN", "San Francisco, CA", "Seattle, WA", "Denver, CO", "Nashville, TN",
-  "Oklahoma City, OK", "El Paso, TX", "Washington, DC", "Boston, MA", "Las Vegas, NV",
-  "Memphis, TN", "Louisville, KY", "Portland, OR", "Baltimore, MD", "Milwaukee, WI",
-  "Albuquerque, NM", "Tucson, AZ", "Fresno, CA", "Sacramento, CA", "Mesa, AZ",
-  "Kansas City, MO", "Atlanta, GA", "Omaha, NE", "Colorado Springs, CO", "Raleigh, NC",
-  "Miami, FL", "Long Beach, CA", "Virginia Beach, VA", "Minneapolis, MN", "Tampa, FL",
-  "New Orleans, LA", "Arlington, TX", "Bakersfield, CA", "Honolulu, HI", "Anaheim, CA",
+const MAP_PINS = [
+  { x: 22, y: 35, label: "Downtown" },
+  { x: 55, y: 25, label: "City Hall" },
+  { x: 75, y: 60, label: "Central Park" },
+  { x: 38, y: 70, label: "HQ" },
+  { x: 85, y: 30, label: "Highway 101" },
+  { x: 15, y: 55, label: "West Side" },
+  { x: 60, y: 80, label: "South District" },
+  { x: 45, y: 45, label: "Midtown" },
 ];
 
-// Icon + label for each detection type shown in the hazard overlay
-const DETECTION_ICON: Record<string, { icon: React.ReactNode; label: string }> = {
-  fire:          { icon: <Flame className="h-8 w-8 text-red-400 animate-pulse mb-1" />,      label: "Fire" },
-  flood:         { icon: <Droplets className="h-8 w-8 text-blue-400 animate-pulse mb-1" />,  label: "Flood" },
-  crash:         { icon: <Car className="h-8 w-8 text-orange-400 animate-pulse mb-1" />,     label: "Vehicle Crash" },
-  fight:         { icon: <Swords className="h-8 w-8 text-red-400 animate-pulse mb-1" />,     label: "Fight / Assault" },
-  weapon:        { icon: <CircleAlert className="h-8 w-8 text-red-500 animate-pulse mb-1" />, label: "Weapon" },
-  hazmat:        { icon: <FlaskConical className="h-8 w-8 text-yellow-400 animate-pulse mb-1" />, label: "Hazmat" },
-  structural:    { icon: <Building2 className="h-8 w-8 text-orange-400 animate-pulse mb-1" />, label: "Structural Damage" },
-  medical:       { icon: <HeartPulse className="h-8 w-8 text-pink-400 animate-pulse mb-1" />, label: "Medical Emergency" },
-  environmental: { icon: <Leaf className="h-8 w-8 text-green-400 animate-pulse mb-1" />,     label: "Environmental Hazard" },
-  anomaly:       { icon: <CircleAlert className="h-8 w-8 text-yellow-400 animate-pulse mb-1" />, label: "Anomaly" },
-};
-
-function CameraFeedCard({
-  feed,
-  onVideoUploaded,
-  onIncidentCreated,
-}: {
-  feed: CameraFeed;
-  onVideoUploaded: () => void;
-  onIncidentCreated: () => void;
-}) {
+function CameraFeedCard({ feed, onVideoUploaded }: { feed: CameraFeed; onVideoUploaded: () => void }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [localVideoUrl, setLocalVideoUrl] = useState<string | null>(null);
-  const [showLocationInput, setShowLocationInput] = useState(false);
-  const [locationValue, setLocationValue] = useState("");
-  const [isSavingLocation, setIsSavingLocation] = useState(false);
-  const [hazardAlert, setHazardAlert] = useState<{ type: string; description: string; confidence: number } | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const locationInputRef = useRef<HTMLSelectElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const analyzeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Track which detection types have already triggered an incident for this video session
-  const reportedHazardsRef = useRef<Set<string>>(new Set());
-  // Track whether analysis should stop (hazard already found)
-  const hazardFoundRef = useRef(false);
   const { toast } = useToast();
 
   const { uploadFile, isUploading, progress } = useUpload({
@@ -256,9 +137,6 @@ function CameraFeedCard({
         await apiRequest("PATCH", `/api/modules/camera-processing/feeds/${feed.id}/video`, { videoUrl: response.objectPath });
         onVideoUploaded();
         toast({ title: "Video Uploaded", description: `${feed.name} feed updated.` });
-        // Show location input after successful upload
-        setShowLocationInput(true);
-        setTimeout(() => locationInputRef.current?.focus(), 100);
       } catch {
         toast({ title: "Error", description: "Failed to save video reference.", variant: "destructive" });
       }
@@ -286,119 +164,14 @@ function CameraFeedCard({
     handleFiles(e.dataTransfer.files);
   }, [handleFiles]);
 
-  const handleSaveLocation = async () => {
-    if (!locationValue || !VALID_LOCATIONS.includes(locationValue)) {
-      toast({ title: "Invalid Location", description: "Please select a valid US city.", variant: "destructive" });
-      return;
-    }
-    setIsSavingLocation(true);
-    try {
-      await apiRequest("PATCH", `/api/modules/camera-processing/feeds/${feed.id}/location`, { location: locationValue });
-      onVideoUploaded();
-      setShowLocationInput(false);
-      setLocationValue("");
-      toast({ title: "Location Saved", description: `Location set to "${locationValue}".` });
-    } catch {
-      toast({ title: "Error", description: "Failed to save location.", variant: "destructive" });
-    } finally {
-      setIsSavingLocation(false);
-    }
-  };
-
-  // Frame analysis: sample a frame from the video element every 3 seconds and send to AI.
-  // Only triggered by a new local upload (localVideoUrl). feed.videoUrl changes (from DB refreshes)
-  // do NOT restart scanning — that would reset the dedup guards and fire duplicate incidents.
-  useEffect(() => {
-    if (!localVideoUrl) return;
-
-    // Reset dedup guards for this new video session
-    reportedHazardsRef.current = new Set();
-    hazardFoundRef.current = false;
-
-    const analyzeFrame = async () => {
-      // Stop scanning once a hazard has been found for this video
-      if (hazardFoundRef.current) return;
-
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      if (!video || !canvas || video.readyState < 2 || video.paused) return;
-
-      setIsAnalyzing(true);
-      try {
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        // Higher resolution (640×360) so small objects like a car 1/16th of the frame are visible
-        canvas.width = 640;
-        canvas.height = 360;
-        ctx.drawImage(video, 0, 0, 640, 360);
-        const imageData = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
-
-        const result = await apiRequest("POST", "/api/modules/camera-processing/detect", {
-          cameraFeedId: feed.id,
-          imageData,
-        });
-        const json = await result.json();
-
-        if (json.autoCreated && json.incident) {
-          const { detection } = json;
-          const detType: string = detection?.detectionType || "anomaly";
-
-          // Skip if we already reported this same hazard type for this video session
-          if (reportedHazardsRef.current.has(detType)) return;
-          reportedHazardsRef.current.add(detType);
-
-          // Stop future scans — one hazard report per video is enough
-          hazardFoundRef.current = true;
-          if (analyzeIntervalRef.current) {
-            clearInterval(analyzeIntervalRef.current);
-            analyzeIntervalRef.current = null;
-          }
-
-          const meta = detection?.metadata as { description?: string; urgency?: string } | null;
-          setHazardAlert({
-            type: detType,
-            description: meta?.description || "Hazard detected",
-            confidence: detection?.confidence || 0,
-          });
-          onVideoUploaded(); // refresh camera feeds (status → incident)
-          onIncidentCreated(); // refresh incidents
-          toast({
-            title: "⚠️ Hazard Detected",
-            description: `${meta?.description || "Threat identified"} at ${feed.location}`,
-            variant: "destructive",
-          });
-        }
-      } catch {
-        // silently ignore analysis errors to avoid noise
-      } finally {
-        setIsAnalyzing(false);
-      }
-    };
-
-    analyzeIntervalRef.current = setInterval(analyzeFrame, 3000);
-    // Run once immediately after a short delay to let the video load
-    const initial = setTimeout(analyzeFrame, 1000);
-
-    return () => {
-      if (analyzeIntervalRef.current) clearInterval(analyzeIntervalRef.current);
-      clearTimeout(initial);
-    };
-  // Only re-run when a new local video is selected — NOT on feed.videoUrl/feed.location changes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localVideoUrl, feed.id]);
-
   const statusInfo = STATUS_BADGE[feed.status] || STATUS_BADGE.idle;
   const hasVideo = localVideoUrl || feed.videoUrl;
 
   return (
     <Card className="bg-slate-900/80 border-slate-700/50 overflow-hidden group relative" data-testid={`camera-card-${feed.id}`}>
-      {/* Hidden canvas for frame extraction */}
-      <canvas ref={canvasRef} className="hidden" />
-
       <div className="relative aspect-video bg-slate-950 overflow-hidden">
         {hasVideo ? (
           <video
-            ref={videoRef}
             src={localVideoUrl || (feed.videoUrl ? `/objects${feed.videoUrl}` : undefined)}
             className="w-full h-full object-cover"
             muted
@@ -446,53 +219,18 @@ function CameraFeedCard({
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
         )}
 
-        {/* Hazard detected overlay */}
-        {hazardAlert && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-950/70 backdrop-blur-[1px] z-10">
-            {(DETECTION_ICON[hazardAlert.type] ?? DETECTION_ICON.anomaly).icon}
-            <span className="text-[11px] font-bold text-red-300 uppercase tracking-widest">Hazard Detected</span>
-            <span className="text-[10px] text-red-400/80 capitalize mt-0.5">
-              {(DETECTION_ICON[hazardAlert.type] ?? DETECTION_ICON.anomaly).label}
-            </span>
-            <p className="text-[9px] text-red-300/70 text-center px-4 mt-1 line-clamp-2">{hazardAlert.description}</p>
-            <button
-              className="mt-2 text-[9px] text-red-400/60 hover:text-red-300 underline"
-              onClick={() => setHazardAlert(null)}
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
-
-        {/* AI scanning indicator (bottom-right, shows when actively analyzing) */}
-        {isAnalyzing && !hazardAlert && (
-          <div className="absolute bottom-2 right-2 flex items-center gap-1 bg-black/60 px-1.5 py-0.5 rounded">
-            <ScanEye className="h-2.5 w-2.5 text-blue-400 animate-pulse" />
-            <span className="text-[9px] text-blue-400">Scanning…</span>
-          </div>
-        )}
-
-        {/* Live / Inactive badge — top left */}
-        <div className="absolute top-2 left-2">
-          {hasVideo ? (
-            <span className="flex items-center gap-1 text-[10px] font-medium text-green-400 bg-black/60 px-1.5 py-0.5 rounded">
-              <Radio className="h-2.5 w-2.5 animate-pulse" />
-              LIVE
-            </span>
-          ) : (
-            <span className="flex items-center gap-1 text-[10px] font-medium text-slate-500 bg-black/60 px-1.5 py-0.5 rounded">
-              <span className="h-2 w-2 rounded-full bg-slate-600" />
-              INACTIVE
-            </span>
-          )}
+        <div className="absolute top-2 left-2 flex items-center gap-1.5">
+          <span className={`h-2.5 w-2.5 rounded-full ${statusInfo.color} ${statusInfo.pulse ? "animate-pulse-status" : ""}`} />
+          <span className="text-[10px] font-medium text-white/90 bg-black/50 px-1.5 py-0.5 rounded uppercase tracking-wider">
+            {feed.status}
+          </span>
         </div>
 
-        {/* AI analysis status badge — only shown when not idle */}
-        {feed.status !== "idle" && (
-          <div className="absolute top-2 left-[4.5rem]">
-            <span className={`flex items-center gap-1 text-[10px] font-medium text-white/90 bg-black/60 px-1.5 py-0.5 rounded uppercase tracking-wider ${statusInfo.pulse ? "animate-pulse" : ""}`}>
-              <span className={`h-1.5 w-1.5 rounded-full ${statusInfo.color}`} />
-              {feed.status}
+        {feed.isActive && (
+          <div className="absolute top-2 right-2">
+            <span className="flex items-center gap-1 text-[10px] text-green-400 bg-black/50 px-1.5 py-0.5 rounded">
+              <Radio className="h-2.5 w-2.5" />
+              LIVE
             </span>
           </div>
         )}
@@ -500,28 +238,7 @@ function CameraFeedCard({
         {hasVideo && (
           <button
             className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 rounded p-1 hover:bg-black/80"
-            onClick={async () => {
-              // Clear local state immediately
-              setLocalVideoUrl(null);
-              setHazardAlert(null);
-              setIsAnalyzing(false);
-              setShowLocationInput(false);
-              setLocationValue("");
-              reportedHazardsRef.current = new Set();
-              hazardFoundRef.current = false;
-              if (analyzeIntervalRef.current) {
-                clearInterval(analyzeIntervalRef.current);
-                analyzeIntervalRef.current = null;
-              }
-              // Disconnect: clears video, resets location to Unassigned, resolves linked incidents
-              try {
-                await apiRequest("POST", `/api/modules/camera-processing/feeds/${feed.id}/disconnect`, {});
-                onVideoUploaded();
-                onIncidentCreated(); // refresh incidents (some may now be resolved)
-              } catch {
-                // best-effort
-              }
-            }}
+            onClick={() => { setLocalVideoUrl(null); }}
             data-testid={`clear-video-${feed.id}`}
           >
             <X className="h-3 w-3 text-white" />
@@ -555,124 +272,88 @@ function CameraFeedCard({
             </TooltipProvider>
           </div>
         </div>
-
-        {showLocationInput && (
-          <div className="mt-2 flex flex-col gap-1.5" data-testid={`location-input-${feed.id}`}>
-            <div className="flex items-center gap-1.5">
-              <div className="relative flex-1">
-                <MapPin className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-500 pointer-events-none z-10" />
-                <select
-                  ref={locationInputRef}
-                  value={locationValue}
-                  onChange={(e) => setLocationValue(e.target.value)}
-                  className="w-full pl-6 pr-2 py-1.5 text-[11px] bg-slate-800 border border-slate-600 rounded text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 appearance-none"
-                  data-testid={`location-select-${feed.id}`}
-                >
-                  <option value="">— Select a US city —</option>
-                  {VALID_LOCATIONS.map((loc) => (
-                    <option key={loc} value={loc}>{loc}</option>
-                  ))}
-                </select>
-              </div>
-              <button
-                onClick={handleSaveLocation}
-                disabled={!locationValue || !VALID_LOCATIONS.includes(locationValue) || isSavingLocation}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium rounded bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white transition-colors"
-                data-testid={`save-location-${feed.id}`}
-              >
-                {isSavingLocation ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                Save
-              </button>
-              <button
-                onClick={() => { setShowLocationInput(false); setLocationValue(""); }}
-                className="p-1.5 rounded hover:bg-slate-800 text-slate-500 hover:text-slate-300 transition-colors"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </Card>
   );
 }
 
-const SEVERITY_PIN_COLORS: Record<string, string> = {
-  critical: "#dc2626",
-  high: "#f97316",
-  medium: "#eab308",
-  low: "#3b82f6",
-};
-
-// GeoJSON for US states (Natural Earth via public CDN)
-const GEO_URL = "https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json";
-
 function IncidentMap({ incidents }: { incidents: Incident[] }) {
   const activeIncidents = incidents.filter((i) => i.status === "active");
 
-  // Build pins — only for incidents whose location has known coordinates
-  const pins = activeIncidents
-    .map((inc) => {
-      const coords = inc.location ? CITY_COORDS[inc.location] : undefined;
-      return coords ? { incident: inc, coords } : null;
-    })
-    .filter(Boolean) as Array<{ incident: Incident; coords: [number, number] }>;
-
   return (
     <div className="relative w-full h-full bg-slate-950 rounded-lg overflow-hidden" data-testid="incident-map">
-      <ComposableMap
-        projection="geoAlbersUsa"
-        projectionConfig={{ scale: 1000 }}
-        style={{ width: "100%", height: "100%", background: "transparent" }}
-      >
-        <Geographies geography={GEO_URL}>
-          {({ geographies }: { geographies: any[] }) =>
-            geographies.map((geo: any) => (
-              <Geography
-                key={geo.rsmKey}
-                geography={geo}
-                fill="#1e293b"
-                stroke="#334155"
-                strokeWidth={0.5}
-                style={{
-                  default: { outline: "none" },
-                  hover: { outline: "none", fill: "#1e293b" },
-                  pressed: { outline: "none" },
-                }}
-              />
-            ))
-          }
-        </Geographies>
+      <svg viewBox="0 0 100 100" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <pattern id="grid" width="5" height="5" patternUnits="userSpaceOnUse">
+            <path d="M 5 0 L 0 0 0 5" fill="none" stroke="rgba(100,116,139,0.15)" strokeWidth="0.2" />
+          </pattern>
+          <radialGradient id="pinGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="currentColor" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+          </radialGradient>
+        </defs>
 
-        {pins.map(({ incident, coords }) => {
-          const color = SEVERITY_PIN_COLORS[incident.severity] || "#64748b";
+        <rect width="100" height="100" fill="url(#grid)" />
+
+        <path d="M 10 40 Q 25 38, 40 42 T 70 35 T 95 45" fill="none" stroke="rgba(100,116,139,0.2)" strokeWidth="0.5" />
+        <path d="M 5 60 Q 30 55, 50 65 T 90 55" fill="none" stroke="rgba(100,116,139,0.2)" strokeWidth="0.5" />
+        <path d="M 30 10 Q 32 30, 35 50 T 30 90" fill="none" stroke="rgba(100,116,139,0.15)" strokeWidth="0.3" />
+        <path d="M 60 5 Q 58 25, 62 45 T 58 85" fill="none" stroke="rgba(100,116,139,0.15)" strokeWidth="0.3" />
+
+        <rect x="18" y="30" width="12" height="8" rx="0.5" fill="rgba(100,116,139,0.08)" stroke="rgba(100,116,139,0.15)" strokeWidth="0.2" />
+        <rect x="50" y="20" width="15" height="10" rx="0.5" fill="rgba(100,116,139,0.08)" stroke="rgba(100,116,139,0.15)" strokeWidth="0.2" />
+        <rect x="70" y="55" width="10" height="12" rx="0.5" fill="rgba(100,116,139,0.08)" stroke="rgba(100,116,139,0.15)" strokeWidth="0.2" />
+
+        {MAP_PINS.map((pin, i) => (
+          <g key={i}>
+            <circle cx={pin.x} cy={pin.y} r="1.5" fill="rgba(100,116,139,0.3)" />
+            <text x={pin.x} y={pin.y + 4} textAnchor="middle" className="fill-slate-600" style={{ fontSize: "2px" }}>
+              {pin.label}
+            </text>
+          </g>
+        ))}
+
+        {activeIncidents.map((incident, index) => {
+          const pin = MAP_PINS[index % MAP_PINS.length];
+          const colors: Record<string, string> = {
+            critical: "#dc2626",
+            high: "#f97316",
+            medium: "#eab308",
+            low: "#3b82f6",
+          };
+          const color = colors[incident.severity] || "#64748b";
+
           return (
-            <Marker key={incident.id} coordinates={coords}>
-              {/* Pulsing halo */}
-              <circle r={10} fill={color} opacity={0.15}>
-                <animate attributeName="r" values="8;13;8" dur="2s" repeatCount="indefinite" />
+            <g key={incident.id} data-testid={`map-pin-${incident.id}`}>
+              <circle cx={pin.x} cy={pin.y} r="4" fill={color} opacity="0.15">
+                <animate attributeName="r" values="3;5;3" dur="2s" repeatCount="indefinite" />
                 <animate attributeName="opacity" values="0.2;0.05;0.2" dur="2s" repeatCount="indefinite" />
               </circle>
-              {/* Solid dot */}
-              <circle r={5} fill={color} stroke="white" strokeWidth={1.5} />
-              {/* Label */}
+              <circle cx={pin.x} cy={pin.y} r="1.8" fill={color} stroke="white" strokeWidth="0.3" />
               <text
+                x={pin.x}
+                y={pin.y - 3.5}
                 textAnchor="middle"
-                y={-10}
-                style={{ fontSize: "8px", fontWeight: "bold", fill: "white", pointerEvents: "none" }}
+                fill="white"
+                style={{ fontSize: "2.2px", fontWeight: "bold" }}
               >
-                {incident.title.length > 18 ? incident.title.slice(0, 18) + "…" : incident.title}
+                {incident.title.length > 15 ? incident.title.slice(0, 15) + "..." : incident.title}
               </text>
-            </Marker>
+            </g>
           );
         })}
-      </ComposableMap>
+      </svg>
 
-      {/* Legend */}
       <div className="absolute bottom-2 left-2 flex items-center gap-3 bg-black/60 rounded px-2 py-1">
         {["critical", "high", "medium", "low"].map((sev) => (
           <div key={sev} className="flex items-center gap-1">
-            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: SEVERITY_PIN_COLORS[sev] }} />
+            <span
+              className="h-2 w-2 rounded-full"
+              style={{
+                backgroundColor:
+                  sev === "critical" ? "#dc2626" : sev === "high" ? "#f97316" : sev === "medium" ? "#eab308" : "#3b82f6",
+              }}
+            />
             <span className="text-[9px] text-slate-400 capitalize">{sev}</span>
           </div>
         ))}
@@ -685,81 +366,6 @@ function IncidentMap({ incidents }: { incidents: Incident[] }) {
   );
 }
 
-// Parse enriched first-responder metadata from incident description
-function parseIncidentMeta(description: string) {
-  const humanLife = /human life present/i.test(description);
-  const noHumanLife = /no human life detected/i.test(description);
-  const animals = /animals present/i.test(description);
-  const objectsMatch = description.match(/objects visible:\s*([^.]+)\./i);
-  const objects = objectsMatch ? objectsMatch[1].trim() : null;
-  return { humanLife, noHumanLife, animals, objects };
-}
-
-const INCIDENT_SEVERITY_WEIGHT: Record<"low" | "medium" | "high" | "critical", number> = {
-  low: 1,
-  medium: 2,
-  high: 3,
-  critical: 4,
-};
-
-// Extract the camera name from an incident title, e.g. "Fire Detected — Camera 2" → "Camera 2"
-function extractCameraKey(incident: Incident): string {
-  const match = incident.title.match(/—\s*(.+)$/);
-  return match ? match[1].trim() : `incident-${incident.id}`;
-}
-
-function rankIncidentsByRisk(incidents: Incident[], assessments: RiskAssessment[]): Incident[] {
-  // Build latest assessment per incident
-  const latestByIncident = new Map<number, RiskAssessment>();
-  for (const item of assessments) {
-    const existing = latestByIncident.get(item.incidentId);
-    if (!existing || new Date(item.createdAt).getTime() > new Date(existing.createdAt).getTime()) {
-      latestByIncident.set(item.incidentId, item);
-    }
-  }
-
-  const enriched = incidents.map((incident) => {
-    const latest = latestByIncident.get(incident.id);
-    const riskScore = typeof latest?.riskScore === "number" ? latest.riskScore : null;
-    const priorityScore = typeof latest?.priorityScore === "number" ? latest.priorityScore : riskScore;
-    return {
-      incident,
-      riskScore,
-      priorityScore,
-      assessmentTs: latest ? new Date(latest.createdAt).getTime() : 0,
-      cameraKey: extractCameraKey(incident),
-    };
-  });
-
-  // Sort by severity first, then risk score, then recency
-  enriched.sort((a, b) => {
-    const sevA = INCIDENT_SEVERITY_WEIGHT[a.incident.severity] ?? 0;
-    const sevB = INCIDENT_SEVERITY_WEIGHT[b.incident.severity] ?? 0;
-    if (sevB !== sevA) return sevB - sevA;
-    if ((b.priorityScore ?? -1) !== (a.priorityScore ?? -1)) return (b.priorityScore ?? -1) - (a.priorityScore ?? -1);
-    if ((b.riskScore ?? -1) !== (a.riskScore ?? -1)) return (b.riskScore ?? -1) - (a.riskScore ?? -1);
-    if (b.assessmentTs !== a.assessmentTs) return b.assessmentTs - a.assessmentTs;
-    return new Date(b.incident.createdAt).getTime() - new Date(a.incident.createdAt).getTime();
-  });
-
-  // Deduplicate: each camera feed gets one rank slot — the worst incident for that camera
-  // (already sorted worst-first, so first occurrence wins)
-  const seenCameras = new Set<string>();
-  const ranked: Incident[] = [];
-  for (const item of enriched) {
-    if (!seenCameras.has(item.cameraKey)) {
-      seenCameras.add(item.cameraKey);
-      ranked.push({
-        ...item.incident,
-        riskRank: ranked.length + 1,
-        riskScore: item.riskScore,
-        priorityScore: item.priorityScore,
-      });
-    }
-  }
-  return ranked;
-}
-
 function LiveIncidentFeed({
   incidents,
   onAlert,
@@ -769,22 +375,6 @@ function LiveIncidentFeed({
   onAlert: (id: number) => void;
   onAnalyze: (id: number) => void;
 }) {
-  const rankBadgeClasses = (severity: string) => {
-    if (severity === "critical") return "border-red-500/80 bg-red-500/20 text-red-200";
-    if (severity === "high") return "border-orange-500/80 bg-orange-500/20 text-orange-200";
-    if (severity === "medium") return "border-amber-500/80 bg-amber-500/20 text-amber-200";
-    return "border-slate-600 bg-slate-700/50 text-slate-300";
-  };
-
-  const cardBorderClasses = (rank: number, severity: string) => {
-    if (rank === 1) return "border-red-500/70 bg-red-500/8 shadow-[0_0_0_1px_rgba(239,68,68,0.25)]";
-    if (rank === 2) return "border-orange-500/60 bg-orange-500/6";
-    if (rank === 3) return "border-amber-500/60 bg-amber-500/6";
-    if (severity === "critical") return "border-red-500/30";
-    if (severity === "high") return "border-orange-500/30";
-    return "border-slate-700/50";
-  };
-
   return (
     <ScrollArea className="h-full" data-testid="incident-feed">
       <div className="space-y-2 pr-3">
@@ -794,103 +384,61 @@ function LiveIncidentFeed({
             <p className="text-sm">No active incidents</p>
           </div>
         ) : (
-          <>
-            {/* Incident cards */}
-            {incidents.map((incident) => {
-              const meta = parseIncidentMeta(incident.description);
-              return (
-                <div
-                  key={incident.id}
-                  className={`p-3 bg-slate-900/60 rounded-lg border hover:border-slate-600/50 transition-colors ${cardBorderClasses(incident.riskRank ?? 999, incident.severity)}`}
-                  data-testid={`incident-card-${incident.id}`}
-                >
-                  <div className="flex items-start gap-2">
-                    {/* Rank block */}
-                    <div className={`shrink-0 min-w-[52px] rounded-md border px-1.5 py-1 text-center ${rankBadgeClasses(incident.severity)}`}>
-                      <p className="text-[9px] uppercase tracking-wide opacity-70">Rank</p>
-                      <p className="text-lg font-extrabold leading-none">#{incident.riskRank}</p>
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Badge className={`text-[10px] px-1.5 py-0 ${SEVERITY_COLORS[incident.severity]}`}>
-                          {incident.severity.toUpperCase()}
-                        </Badge>
-                        {incident.status === "active" && (
-                          <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse-status" />
-                        )}
-                      </div>
-                      <h4 className="text-sm font-medium text-slate-200 truncate">{incident.title}</h4>
-                      <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">{incident.description}</p>
-
-                      {/* First-responder indicator badges */}
-                      <div className="flex flex-wrap items-center gap-1 mt-1.5">
-                        {meta.humanLife && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30">
-                            <User className="h-2 w-2" />
-                            Human life
-                          </span>
-                        )}
-                        {meta.noHumanLife && !meta.humanLife && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-slate-700/50 text-slate-500 border border-slate-700/30">
-                            <User className="h-2 w-2" />
-                            No humans
-                          </span>
-                        )}
-                        {meta.animals && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                            <PawPrint className="h-2 w-2" />
-                            Animals
-                          </span>
-                        )}
-                        {meta.objects && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-slate-700/50 text-slate-400 border border-slate-600/30">
-                            <Box className="h-2 w-2" />
-                            {meta.objects.length > 30 ? meta.objects.slice(0, 30) + "…" : meta.objects}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-3 mt-1.5">
-                        {incident.location && (
-                          <span className="text-[10px] text-slate-500 flex items-center gap-0.5">
-                            <MapPin className="h-2.5 w-2.5" />
-                            {incident.location}
-                          </span>
-                        )}
-                        <span className="text-[10px] text-slate-600 flex items-center gap-0.5">
-                          <Clock className="h-2.5 w-2.5" />
-                          {new Date(incident.createdAt).toLocaleTimeString()}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-1 shrink-0">
-                      <Button
-                        size="sm"
-                        className="h-6 px-2 text-[10px] bg-blue-600 hover:bg-blue-700"
-                        onClick={() => onAlert(incident.id)}
-                        data-testid={`alert-btn-${incident.id}`}
-                      >
-                        <Phone className="h-2.5 w-2.5 mr-0.5" />
-                        Alert
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-6 px-2 text-[10px] border-slate-700 hover:bg-slate-800"
-                        onClick={() => onAnalyze(incident.id)}
-                        data-testid={`analyze-btn-${incident.id}`}
-                      >
-                        <Zap className="h-2.5 w-2.5 mr-0.5" />
-                        Analyze
-                      </Button>
-                    </div>
+          incidents.map((incident) => (
+            <div
+              key={incident.id}
+              className="p-3 bg-slate-900/60 rounded-lg border border-slate-700/50 hover:border-slate-600/50 transition-colors"
+              data-testid={`incident-card-${incident.id}`}
+            >
+              <div className="flex items-start gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Badge className={`text-[10px] px-1.5 py-0 ${SEVERITY_COLORS[incident.severity]}`}>
+                      {incident.severity.toUpperCase()}
+                    </Badge>
+                    {incident.status === "active" && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse-status" />
+                    )}
+                  </div>
+                  <h4 className="text-sm font-medium text-slate-200 truncate">{incident.title}</h4>
+                  <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">{incident.description}</p>
+                  <div className="flex items-center gap-3 mt-1.5">
+                    {incident.location && (
+                      <span className="text-[10px] text-slate-500 flex items-center gap-0.5">
+                        <MapPin className="h-2.5 w-2.5" />
+                        {incident.location}
+                      </span>
+                    )}
+                    <span className="text-[10px] text-slate-600 flex items-center gap-0.5">
+                      <Clock className="h-2.5 w-2.5" />
+                      {new Date(incident.createdAt).toLocaleTimeString()}
+                    </span>
                   </div>
                 </div>
-              );
-            })}
-          </>
+                <div className="flex flex-col gap-1 shrink-0">
+                  <Button
+                    size="sm"
+                    className="h-6 px-2 text-[10px] bg-blue-600 hover:bg-blue-700"
+                    onClick={() => onAlert(incident.id)}
+                    data-testid={`alert-btn-${incident.id}`}
+                  >
+                    <Phone className="h-2.5 w-2.5 mr-0.5" />
+                    Alert
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 px-2 text-[10px] border-slate-700 hover:bg-slate-800"
+                    onClick={() => onAnalyze(incident.id)}
+                    data-testid={`analyze-btn-${incident.id}`}
+                  >
+                    <Zap className="h-2.5 w-2.5 mr-0.5" />
+                    Analyze
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))
         )}
       </div>
     </ScrollArea>
@@ -912,40 +460,27 @@ function ContactsTable({
 }) {
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState({ name: "", phone: "", email: "", roleSelect: "ems", roleCustom: "", location: "", priority: 1 });
+  const [form, setForm] = useState({ name: "", phone: "", email: "", role: "first_responder", priority: 1 });
 
   const resetForm = () => {
-    setForm({ name: "", phone: "", email: "", roleSelect: "ems", roleCustom: "", location: "", priority: 1 });
+    setForm({ name: "", phone: "", email: "", role: "first_responder", priority: 1 });
     setIsAdding(false);
     setEditingId(null);
   };
 
   const handleSave = () => {
     if (!form.name || !form.phone) return;
-    const role = form.roleSelect === "custom" ? form.roleCustom.trim() || "custom" : form.roleSelect;
-    const payload = {
-      name: form.name,
-      phone: form.phone,
-      email: form.email,
-      role,
-      priority: form.priority,
-      metadata: { location: form.location },
-    };
     if (editingId) {
-      onEdit(editingId, payload);
+      onEdit(editingId, form);
     } else {
-      onAdd(payload);
+      onAdd(form);
     }
     resetForm();
   };
 
   const startEdit = (c: Contact) => {
     setEditingId(c.id);
-    const presetRoles = ["ems", "fire", "police"];
-    const roleSelect = presetRoles.includes(c.role) ? c.role : "custom";
-    const roleCustom = presetRoles.includes(c.role) ? "" : c.role;
-    const location = c.metadata?.location || "";
-    setForm({ name: c.name, phone: c.phone, email: c.email || "", roleSelect, roleCustom, location, priority: c.priority });
+    setForm({ name: c.name, phone: c.phone, email: c.email || "", role: c.role, priority: c.priority });
     setIsAdding(true);
   };
 
@@ -956,7 +491,7 @@ function ContactsTable({
         <Button
           size="sm"
           className="h-6 px-2 text-[10px] bg-emerald-600 hover:bg-emerald-700"
-          onClick={() => { setIsAdding(true); setEditingId(null); setForm({ name: "", phone: "", email: "", roleSelect: "ems", roleCustom: "", location: "", priority: 1 }); }}
+          onClick={() => { setIsAdding(true); setEditingId(null); setForm({ name: "", phone: "", email: "", role: "first_responder", priority: 1 }); }}
           data-testid="add-contact-btn"
         >
           <UserPlus className="h-2.5 w-2.5 mr-1" />
@@ -983,15 +518,16 @@ function ContactsTable({
             />
           </div>
           <div className="grid grid-cols-2 gap-1.5">
-            <Select value={form.roleSelect} onValueChange={(v) => setForm({ ...form, roleSelect: v, roleCustom: "" })}>
+            <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
               <SelectTrigger className="h-7 text-xs bg-slate-950 border-slate-700" data-testid="contact-role-select">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ems">EMS</SelectItem>
+                <SelectItem value="first_responder">First Responder</SelectItem>
+                <SelectItem value="medical">Medical</SelectItem>
                 <SelectItem value="fire">Fire</SelectItem>
                 <SelectItem value="police">Police</SelectItem>
-                <SelectItem value="custom">Type your own…</SelectItem>
+                <SelectItem value="coordinator">Coordinator</SelectItem>
               </SelectContent>
             </Select>
             <Input
@@ -1002,25 +538,6 @@ function ContactsTable({
               data-testid="contact-email-input"
             />
           </div>
-          {form.roleSelect === "custom" && (
-            <Input
-              placeholder="Enter custom role…"
-              value={form.roleCustom}
-              onChange={(e) => setForm({ ...form, roleCustom: e.target.value })}
-              className="h-7 text-xs bg-slate-950 border-slate-700"
-              data-testid="contact-role-custom-input"
-            />
-          )}
-          <Select value={form.location} onValueChange={(v) => setForm({ ...form, location: v })}>
-            <SelectTrigger className="h-7 text-xs bg-slate-950 border-slate-700" data-testid="contact-location-select">
-              <SelectValue placeholder="Select location…" />
-            </SelectTrigger>
-            <SelectContent>
-              {VALID_LOCATIONS.map((loc) => (
-                <SelectItem key={loc} value={loc}>{loc}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           <div className="flex gap-1.5 justify-end">
             <Button size="sm" variant="outline" className="h-6 px-2 text-[10px] border-slate-700" onClick={resetForm}>
               Cancel
@@ -1048,18 +565,12 @@ function ContactsTable({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-medium text-slate-300 truncate">{contact.name}</span>
-                  <Badge variant="outline" className={`text-[9px] px-1 py-0 ${ROLE_COLORS[contact.role] || "bg-slate-700/30 text-slate-400 border-slate-600/30"}`}>
-                    {contact.role.replace(/_/g, " ")}
+                  <Badge variant="outline" className={`text-[9px] px-1 py-0 ${ROLE_COLORS[contact.role] || ""}`}>
+                    {contact.role.replace("_", " ")}
                   </Badge>
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-[10px] text-slate-500">{contact.phone}</span>
-                  {contact.metadata?.location && (
-                    <span className="text-[10px] text-slate-600 flex items-center gap-0.5">
-                      <MapPin className="h-2 w-2" />
-                      {contact.metadata.location}
-                    </span>
-                  )}
                   <span className="text-[10px] text-slate-600">P{contact.priority}</span>
                 </div>
               </div>
@@ -1195,22 +706,13 @@ function RobocallerConsole({ robocalls, incidents }: { robocalls: Robocall[]; in
 export default function Dashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [maximizedPanel, setMaximizedPanel] = useState<string | null>(null);
-  const rankingSyncInFlightRef = useRef(false);
-  const analyzingIncidentsRef = useRef(new Set<number>());
-
-  const analyzeAndRefreshRankings = useCallback(async (incidentId: number) => {
-    if (analyzingIncidentsRef.current.has(incidentId)) return;
-    analyzingIncidentsRef.current.add(incidentId);
-    try {
-      await apiRequest("POST", `/api/modules/risk-analysis/analyze/${incidentId}`);
-      queryClient.invalidateQueries({ queryKey: ["/api/modules/risk-analysis"] });
-    } catch {
-      // silent
-    } finally {
-      analyzingIncidentsRef.current.delete(incidentId);
-    }
-  }, [queryClient]);
+  const [isCreateIncidentOpen, setIsCreateIncidentOpen] = useState(false);
+  const [newIncident, setNewIncident] = useState({
+    title: "",
+    description: "",
+    severity: "medium",
+    location: "",
+  });
 
   useEffect(() => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -1224,11 +726,6 @@ export default function Dashboard() {
         const message = JSON.parse(event.data);
         if (message.event?.includes("incident")) {
           queryClient.invalidateQueries({ queryKey: ["/api/incidents"] });
-          // Immediately score any newly created incident
-          const incidentId = message.data?.incident?.id ?? message.data?.incidentId;
-          if (typeof incidentId === "number") {
-            void analyzeAndRefreshRankings(incidentId);
-          }
         }
         if (message.event?.includes("module_health")) {
           queryClient.invalidateQueries({ queryKey: ["/api/health"] });
@@ -1238,17 +735,9 @@ export default function Dashboard() {
         }
         if (message.event?.includes("camera") || message.event?.includes("detection")) {
           queryClient.invalidateQueries({ queryKey: ["/api/modules/camera-processing/feeds"] });
-          // Re-score the incident linked to this detection
-          const incidentId = message.data?.detection?.incidentId ?? message.data?.incidentId;
-          if (typeof incidentId === "number") {
-            void analyzeAndRefreshRankings(incidentId);
-          }
         }
         if (message.event?.includes("contact")) {
           queryClient.invalidateQueries({ queryKey: ["/api/modules/contact-management"] });
-        }
-        if (message.event?.includes("risk")) {
-          queryClient.invalidateQueries({ queryKey: ["/api/modules/risk-analysis"] });
         }
       } catch {}
     };
@@ -1268,11 +757,6 @@ export default function Dashboard() {
     refetchInterval: 5000,
   });
 
-  const { data: riskAssessments = [] } = useQuery<RiskAssessment[]>({
-    queryKey: ["/api/modules/risk-analysis"],
-    refetchInterval: 5000,
-  });
-
   const { data: moduleHealth = [] } = useQuery<ModuleHealth[]>({
     queryKey: ["/api/health"],
     refetchInterval: 10000,
@@ -1282,29 +766,25 @@ export default function Dashboard() {
     queryKey: ["/api/modules/contact-management"],
   });
 
-  const { data: cameraFeeds = [], isFetched: cameraFeedsFetched } = useQuery<CameraFeed[]>({
+  const { data: cameraFeeds = [] } = useQuery<CameraFeed[]>({
     queryKey: ["/api/modules/camera-processing/feeds"],
   });
 
-  // Seed 4 real camera feeds into the DB on first load if the DB is actually empty
-  useEffect(() => {
-    if (!cameraFeedsFetched || cameraFeeds.length > 0) return;
-    const seed = async () => {
-      try {
-        await Promise.all([
-          apiRequest("POST", "/api/modules/camera-processing/feeds", { name: "Camera 1", location: "Unassigned" }),
-          apiRequest("POST", "/api/modules/camera-processing/feeds", { name: "Camera 2", location: "Unassigned" }),
-          apiRequest("POST", "/api/modules/camera-processing/feeds", { name: "Camera 3", location: "Unassigned" }),
-          apiRequest("POST", "/api/modules/camera-processing/feeds", { name: "Camera 4", location: "Unassigned" }),
-        ]);
-        queryClient.invalidateQueries({ queryKey: ["/api/modules/camera-processing/feeds"] });
-      } catch {}
-    };
-    seed();
-  }, [cameraFeedsFetched]);
-
   const { data: robocalls = [] } = useQuery<Robocall[]>({
     queryKey: ["/api/modules/robocaller"],
+  });
+
+  const createIncidentMutation = useMutation({
+    mutationFn: async (data: typeof newIncident) => {
+      const res = await apiRequest("POST", "/api/incidents", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/incidents"] });
+      setIsCreateIncidentOpen(false);
+      setNewIncident({ title: "", description: "", severity: "medium", location: "" });
+      toast({ title: "Incident Created", description: "Emergency incident has been reported." });
+    },
   });
 
   const initiateRobocalls = useCallback(
@@ -1324,7 +804,6 @@ export default function Dashboard() {
     async (incidentId: number) => {
       try {
         await apiRequest("POST", `/api/modules/risk-analysis/analyze/${incidentId}`);
-        queryClient.invalidateQueries({ queryKey: ["/api/modules/risk-analysis"] });
         toast({ title: "Analysis Queued", description: "AI risk assessment in progress." });
       } catch {
         toast({ title: "Error", description: "Failed to analyze risk.", variant: "destructive" });
@@ -1382,58 +861,14 @@ export default function Dashboard() {
     []
   );
 
-  // Resolve all active incidents at once
-  const clearAllIncidents = useCallback(async () => {
-    const active = incidents.filter((i) => i.status === "active");
-    if (active.length === 0) return;
-    try {
-      await Promise.all(
-        active.map((inc) =>
-          apiRequest("PATCH", `/api/incidents/${inc.id}`, { status: "resolved" })
-        )
-      );
-      queryClient.invalidateQueries({ queryKey: ["/api/incidents"] });
-      toast({ title: "Incidents Cleared", description: `${active.length} incident${active.length !== 1 ? "s" : ""} resolved.` });
-    } catch {
-      toast({ title: "Error", description: "Failed to clear incidents.", variant: "destructive" });
-    }
-  }, [incidents, toast]);
-
-  const activeIncidents = useMemo(
-    () => rankIncidentsByRisk(incidents.filter((i) => i.status === "active"), riskAssessments),
-    [incidents, riskAssessments],
-  );
-  const activeIncidentIdsKey = useMemo(
-    () => incidents.filter((i) => i.status === "active").map((i) => i.id).sort((a, b) => a - b).join(","),
-    [incidents],
-  );
+  const activeIncidents = incidents.filter((i) => i.status === "active");
   const criticalCount = incidents.filter((i) => i.severity === "critical" && i.status === "active").length;
-  const displayFeeds = cameraFeeds.slice(0, 4);
-
-  useEffect(() => {
-    let isMounted = true;
-    const syncRankings = async () => {
-      if (!isMounted) return;
-      if (!activeIncidentIdsKey) return;
-      if (rankingSyncInFlightRef.current) return;
-      rankingSyncInFlightRef.current = true;
-      try {
-        await apiRequest("POST", "/api/modules/risk-analysis/analyze-all?cooldownSeconds=15");
-        queryClient.invalidateQueries({ queryKey: ["/api/modules/risk-analysis"] });
-      } catch {
-        // Silent background sync failure
-      } finally {
-        rankingSyncInFlightRef.current = false;
-      }
-    };
-
-    void syncRankings();
-    const timer = setInterval(syncRankings, 8000);
-    return () => {
-      isMounted = false;
-      clearInterval(timer);
-    };
-  }, [activeIncidentIdsKey, queryClient]);
+  const displayFeeds = cameraFeeds.length > 0 ? cameraFeeds.slice(0, 4) : [
+    { id: -1, name: "Camera 1", location: "Unassigned", status: "idle", isActive: false, createdAt: "" },
+    { id: -2, name: "Camera 2", location: "Unassigned", status: "idle", isActive: false, createdAt: "" },
+    { id: -3, name: "Camera 3", location: "Unassigned", status: "idle", isActive: false, createdAt: "" },
+    { id: -4, name: "Camera 4", location: "Unassigned", status: "idle", isActive: false, createdAt: "" },
+  ] as CameraFeed[];
 
   const getHealthIcon = (name: string) => {
     const m = moduleHealth.find((h) => h.moduleName === name);
@@ -1443,84 +878,8 @@ export default function Dashboard() {
     return <XCircle className="h-3 w-3 text-red-500" />;
   };
 
-  // Helper: maximize button for card headers
-  const MaxBtn = ({ panel }: { panel: string }) => (
-    <button
-      onClick={() => setMaximizedPanel(panel)}
-      className="ml-1 p-0.5 rounded hover:bg-slate-700/50 transition-colors text-slate-600 hover:text-slate-400"
-      title="Maximize"
-    >
-      <Maximize2 className="h-3 w-3" />
-    </button>
-  );
-
   return (
     <div className="h-screen flex flex-col bg-slate-950 text-slate-200 overflow-hidden dark">
-      {/* Maximized Panel Overlay */}
-      {maximizedPanel && (
-        <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col">
-          <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-slate-800">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-              {maximizedPanel === "map" && <><MapPin className="h-3.5 w-3.5" /> Incident Map</>}
-              {maximizedPanel === "incidents" && <><Activity className="h-3.5 w-3.5 text-red-400" /> Live Incident Feed</>}
-              {maximizedPanel === "contacts" && <><Users className="h-3.5 w-3.5" /> Contact Directory</>}
-              {maximizedPanel === "robocaller" && <><Phone className="h-3.5 w-3.5 text-green-400" /> Robocaller Console</>}
-              {maximizedPanel === "cameras" && <><Camera className="h-3.5 w-3.5" /> Camera Feeds</>}
-            </span>
-            <button
-              onClick={() => setMaximizedPanel(null)}
-              className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-200 transition-colors px-2 py-1 rounded hover:bg-slate-800"
-            >
-              <Minimize2 className="h-3.5 w-3.5" />
-              Minimize
-            </button>
-          </div>
-          <div className="flex-1 min-h-0 p-3 overflow-hidden">
-            {maximizedPanel === "map" && <IncidentMap incidents={incidents} />}
-            {maximizedPanel === "incidents" && (
-              <div className="h-full flex flex-col">
-                {activeIncidents.length > 0 && (
-                  <div className="shrink-0 flex justify-end mb-2">
-                    <button
-                      onClick={clearAllIncidents}
-                      className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-red-400 transition-colors"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      Clear all
-                    </button>
-                  </div>
-                )}
-                <div className="flex-1 min-h-0">
-                  <LiveIncidentFeed incidents={activeIncidents} onAlert={initiateRobocalls} onAnalyze={analyzeRisk} />
-                </div>
-              </div>
-            )}
-            {maximizedPanel === "contacts" && (
-              <ContactsTable
-                contacts={contacts}
-                onAdd={createContact}
-                onEdit={editContact}
-                onDelete={deleteContact}
-                onToggle={toggleContact}
-              />
-            )}
-            {maximizedPanel === "robocaller" && <RobocallerConsole robocalls={robocalls} incidents={incidents} />}
-            {maximizedPanel === "cameras" && (
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 h-full">
-                {displayFeeds.map((feed) => (
-                  <CameraFeedCard
-                    key={feed.id}
-                    feed={feed}
-                    onVideoUploaded={() => queryClient.invalidateQueries({ queryKey: ["/api/modules/camera-processing/feeds"] })}
-                    onIncidentCreated={() => queryClient.invalidateQueries({ queryKey: ["/api/incidents"] })}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Header Bar */}
       <header className="shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-slate-800">
         <div className="flex items-center gap-3">
@@ -1532,7 +891,12 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-4">
-          {/* Module health indicators */}
+          <Link href="/map">
+            <Button size="sm" variant="outline" className="h-7 text-xs border-slate-700 hover:bg-slate-800 text-slate-300" data-testid="open-map-btn">
+              <MapPin className="h-3 w-3 mr-1" />
+              Incident Map
+            </Button>
+          </Link>
           <div className="hidden md:flex items-center gap-3">
             {[
               { key: "robocaller", label: "Robocaller" },
@@ -1558,6 +922,76 @@ export default function Dashboard() {
               {activeIncidents.length} Active
             </Badge>
           </div>
+
+          <Dialog open={isCreateIncidentOpen} onOpenChange={setIsCreateIncidentOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="h-7 text-xs bg-red-600 hover:bg-red-700" data-testid="report-incident-btn">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                Report Incident
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="bg-slate-900 text-white border-slate-700 max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-base">Report Emergency Incident</DialogTitle>
+                <DialogDescription className="text-slate-400 text-xs">
+                  Create a new incident for immediate response coordination.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 mt-2">
+                <Input
+                  value={newIncident.title}
+                  onChange={(e) => setNewIncident({ ...newIncident, title: e.target.value })}
+                  placeholder="Incident title"
+                  className="bg-slate-950 border-slate-700 text-sm"
+                  data-testid="incident-title-input"
+                />
+                <Textarea
+                  value={newIncident.description}
+                  onChange={(e) => setNewIncident({ ...newIncident, description: e.target.value })}
+                  placeholder="Detailed description"
+                  className="bg-slate-950 border-slate-700 text-sm"
+                  rows={3}
+                  data-testid="incident-description-input"
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <Select
+                    value={newIncident.severity}
+                    onValueChange={(value) => setNewIncident({ ...newIncident, severity: value })}
+                  >
+                    <SelectTrigger className="bg-slate-950 border-slate-700 text-sm" data-testid="incident-severity-select">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="critical">Critical</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={newIncident.location}
+                    onChange={(e) => setNewIncident({ ...newIncident, location: e.target.value })}
+                    placeholder="Location"
+                    className="bg-slate-950 border-slate-700 text-sm"
+                    data-testid="incident-location-input"
+                  />
+                </div>
+                <Button
+                  onClick={() => createIncidentMutation.mutate(newIncident)}
+                  disabled={!newIncident.title || !newIncident.description || createIncidentMutation.isPending}
+                  className="w-full bg-red-600 hover:bg-red-700 text-sm"
+                  data-testid="create-incident-btn"
+                >
+                  {createIncidentMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                  ) : (
+                    <AlertCircle className="h-3.5 w-3.5 mr-1" />
+                  )}
+                  Create Incident
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </header>
 
@@ -1569,28 +1003,15 @@ export default function Dashboard() {
             <Camera className="h-4 w-4 text-slate-500" />
             <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Camera Feeds</h2>
             <span className="text-[10px] text-slate-600">{cameraFeeds.filter((f) => f.isActive).length} active</span>
-            <MaxBtn panel="cameras" />
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {displayFeeds.length === 0
-              ? Array.from({ length: 4 }).map((_, i) => (
-                  <Card key={i} className="bg-slate-900/80 border-slate-700/50 overflow-hidden">
-                    <div className="aspect-video bg-slate-950 flex items-center justify-center">
-                      <Loader2 className="h-6 w-6 text-slate-700 animate-spin" />
-                    </div>
-                    <div className="p-3">
-                      <div className="h-3 w-20 bg-slate-800 rounded animate-pulse" />
-                    </div>
-                  </Card>
-                ))
-              : displayFeeds.map((feed) => (
-                  <CameraFeedCard
-                    key={feed.id}
-                    feed={feed}
-                    onVideoUploaded={() => queryClient.invalidateQueries({ queryKey: ["/api/modules/camera-processing/feeds"] })}
-                    onIncidentCreated={() => queryClient.invalidateQueries({ queryKey: ["/api/incidents"] })}
-                  />
-                ))}
+            {displayFeeds.map((feed) => (
+              <CameraFeedCard
+                key={feed.id}
+                feed={feed}
+                onVideoUploaded={() => queryClient.invalidateQueries({ queryKey: ["/api/modules/camera-processing/feeds"] })}
+              />
+            ))}
           </div>
         </section>
 
@@ -1598,13 +1019,10 @@ export default function Dashboard() {
         <section className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-3 min-h-0">
           <Card className="bg-slate-900/50 border-slate-800 overflow-hidden">
             <CardHeader className="py-2 px-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <MapPin className="h-3.5 w-3.5" />
-                  Incident Map
-                </CardTitle>
-                <MaxBtn panel="map" />
-              </div>
+              <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                <MapPin className="h-3.5 w-3.5" />
+                Incident Map
+              </CardTitle>
             </CardHeader>
             <CardContent className="p-2 h-[calc(100%-40px)]">
               <IncidentMap incidents={incidents} />
@@ -1613,32 +1031,17 @@ export default function Dashboard() {
 
           <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col">
             <CardHeader className="py-2 px-3 shrink-0">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <Activity className="h-3.5 w-3.5 text-red-400" />
-                  Live Incident Feed
-                  {activeIncidents.length > 0 && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse-status" />
-                  )}
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  {activeIncidents.length > 0 && (
-                    <button
-                      onClick={clearAllIncidents}
-                      className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-red-400 transition-colors"
-                      data-testid="clear-incidents-btn"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      Clear all
-                    </button>
-                  )}
-                  <MaxBtn panel="incidents" />
-                </div>
-              </div>
+              <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                <Activity className="h-3.5 w-3.5 text-red-400" />
+                Live Incident Feed
+                {activeIncidents.length > 0 && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse-status" />
+                )}
+              </CardTitle>
             </CardHeader>
             <CardContent className="p-2 flex-1 min-h-0">
               <LiveIncidentFeed
-                incidents={activeIncidents}
+                incidents={incidents}
                 onAlert={initiateRobocalls}
                 onAnalyze={analyzeRisk}
               />
@@ -1650,13 +1053,10 @@ export default function Dashboard() {
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-3 min-h-0">
           <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col">
             <CardHeader className="py-2 px-3 shrink-0">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <Users className="h-3.5 w-3.5" />
-                  Contact Directory
-                </CardTitle>
-                <MaxBtn panel="contacts" />
-              </div>
+              <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                <Users className="h-3.5 w-3.5" />
+                Contact Directory
+              </CardTitle>
             </CardHeader>
             <CardContent className="p-2 flex-1 min-h-0">
               <ContactsTable
@@ -1671,13 +1071,10 @@ export default function Dashboard() {
 
           <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col">
             <CardHeader className="py-2 px-3 shrink-0">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <Phone className="h-3.5 w-3.5 text-green-400" />
-                  Robocaller Console
-                </CardTitle>
-                <MaxBtn panel="robocaller" />
-              </div>
+              <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                <Phone className="h-3.5 w-3.5 text-green-400" />
+                Robocaller Console
+              </CardTitle>
             </CardHeader>
             <CardContent className="p-2 flex-1 min-h-0">
               <RobocallerConsole robocalls={robocalls} incidents={incidents} />

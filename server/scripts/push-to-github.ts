@@ -152,15 +152,22 @@ async function main() {
 
   console.log(`Created ${blobs.length} blobs total`);
 
+  let baseTreeSha: string | undefined;
+  if (latestCommitSha) {
+    const { data: latestCommit } = await octokit.git.getCommit({ owner, repo, commit_sha: latestCommitSha });
+    baseTreeSha = latestCommit.tree.sha;
+  }
+
   const { data: tree } = await octokit.git.createTree({
     owner, repo,
     tree: blobs,
+    ...(baseTreeSha ? { base_tree: baseTreeSha } : {}),
   });
   console.log('Created tree:', tree.sha);
 
   const { data: commit } = await octokit.git.createCommit({
     owner, repo,
-    message: 'AI Incident Response Command Center - Full Dashboard\n\nFeatures:\n- 4 camera feed cards with MP4 drag-and-drop upload and video preview\n- Interactive incident map with severity-coded pins\n- Live incident feed panel with real-time updates\n- Contact database with full CRUD operations\n- Robocaller console terminal\n- Dark command-center theme\n- WebSocket real-time updates',
+    message: 'AI Incident Response Command Center - Full Dashboard + WebSpatial Map\n\nFeatures:\n- 4 camera feed cards with MP4 drag-and-drop upload and video preview\n- Interactive SVG US map with gray camera pins and red severity-coded incident pins\n- WebSpatial 3D state pop-out on click (with 2D overlay fallback)\n- Live incident feed panel with real-time WebSocket updates\n- Contact database with full CRUD operations\n- Robocaller console terminal\n- Dark command-center theme\n- 20 camera feeds and 10 incidents seeded across US states',
     tree: tree.sha,
     parents: [latestCommitSha!],
   });

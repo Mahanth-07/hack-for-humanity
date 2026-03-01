@@ -153,29 +153,27 @@ def build_dynamic_vars(incident: dict, contact: dict, risk: dict | None) -> tupl
     Build the three ElevenLabs dynamic variable strings.
     Returns (CAMERA_FACTS, LOCATION, CALLER_CONTEXT)
     """
-    # Parse description for camera facts if stored as JSON-like text
     desc = incident.get("description", "")
 
-    # CAMERA_FACTS — what the camera saw
+    # CAMERA_FACTS — full sentence so the LLM can read it naturally
     detection_type = incident.get("title", "").split(" Detected")[0] if " Detected" in (incident.get("title") or "") else "Unknown"
-    camera_facts_parts = [
-        f"Detection: {detection_type}",
-        f"Description: {desc}",
-    ]
-    camera_facts = " | ".join(camera_facts_parts)
+    camera_facts = f"A {detection_type.lower()} was detected. {desc}".strip()
 
     # LOCATION
     location = incident.get("location") or "Unknown location"
 
-    # CALLER_CONTEXT — severity, risk, recommendations
+    # CALLER_CONTEXT — sentence-structured to avoid contradictory label confusion
+    # incidents.severity = immediate camera AI rating; risk_score = historical engine score
     severity = incident.get("severity", "unknown").upper()
+    status = incident.get("status", "active")
     context_parts = [
-        f"Severity: {severity}",
-        f"Status: {incident.get('status', 'active')}",
+        f"Alert level: {severity} (camera detection)",
+        f"Status: {status}",
     ]
     if risk:
-        context_parts.append(f"Risk score: {risk.get('risk_score', 'N/A')}/100")
-        context_parts.append(f"Threat level: {risk.get('threat_level', 'unknown')}")
+        score = risk.get("risk_score") or risk.get("riskScore", "N/A")
+        threat = risk.get("threat_level") or risk.get("threatLevel", "unknown")
+        context_parts.append(f"Risk engine score: {score}/100 ({threat}) — may be lower for new incidents with limited history")
         analysis = risk.get("analysis", "")
         if analysis:
             context_parts.append(f"Analysis: {analysis}")
@@ -187,7 +185,9 @@ def build_dynamic_vars(incident: dict, contact: dict, risk: dict | None) -> tupl
                 recommendations = [recommendations]
         if recommendations:
             context_parts.append("Recommended actions: " + "; ".join(str(r) for r in recommendations[:3]))
-    caller_context = " | ".join(context_parts)
+    else:
+        context_parts.append("Risk assessment: pending")
+    caller_context = ". ".join(context_parts) + "."
 
     return camera_facts, location, caller_context
 

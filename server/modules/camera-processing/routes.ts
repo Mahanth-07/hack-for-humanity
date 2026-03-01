@@ -6,6 +6,7 @@ import { Router, Request, Response } from "express";
   import { broadcast } from "../../index";
   import { assessRisk, rankAssessments, Detection, ModelWindow, RiskFactor } from "../risk-analysis/engine";
   import { defaultRiskConfig } from "../risk-analysis/config";
+  import { triggerRobocall } from "../robocaller/trigger";
 
   const router = Router();
 
@@ -342,6 +343,26 @@ If no threat is detected, return detectionType "none" and urgency "none". Still 
             } catch (riskErr) {
               console.error("Auto risk scoring failed for new incident:", riskErr);
             }
+
+            // Update camera to "calling" and fire ElevenLabs outbound call (non-blocking)
+            await db
+              .update(cameraFeeds)
+              .set({ status: "calling" })
+              .where(eq(cameraFeeds.id, cameraFeedId));
+            broadcast("camera_status_changed", { cameraFeedId: camera.id, status: "calling" });
+            triggerRobocall(incident.id, {
+              detectionType: aiDetection.detectionType,
+              confidence: aiDetection.confidence || 0,
+              sceneContext: aiDetection.sceneContext || "",
+              humanLifePresent: aiDetection.humanLifePresent ?? false,
+              inanimateObjects: aiDetection.inanimateObjects || "",
+              description: aiDetection.description || "",
+              severity: newSeverity,
+              location: camera.location,
+              cameraName: camera.name,
+            }).catch((roboErr) =>
+              console.error(`Robocall failed for incident ${incident.id}:`, roboErr)
+            );
 
             return res.json({ detection, incident, autoCreated: true, cameraName: camera.name });
           }

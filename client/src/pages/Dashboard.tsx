@@ -336,6 +336,7 @@ function CameraFeedCard({
         const result = await apiRequest("POST", "/api/modules/camera-processing/detect", {
           cameraFeedId: feed.id,
           imageData,
+          videoUrl: feed.videoUrl, // Pass URL directly to avoid DB read race conditions
         });
         const json = await result.json();
 
@@ -410,8 +411,8 @@ function CameraFeedCard({
         ) : (
           <div
             className={`w-full h-full flex flex-col items-center justify-center cursor-pointer transition-all duration-200 ${isDragOver
-                ? "bg-blue-500/20 border-2 border-dashed border-blue-400"
-                : "bg-slate-950 hover:bg-slate-900/50"
+              ? "bg-blue-500/20 border-2 border-dashed border-blue-400"
+              : "bg-slate-950 hover:bg-slate-900/50"
               }`}
             onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
             onDragLeave={() => setIsDragOver(false)}
@@ -1038,8 +1039,8 @@ function ContactsTable({
             <div
               key={contact.id}
               className={`flex items-center gap-2 p-2 rounded border transition-colors ${contact.isActive
-                  ? "bg-slate-900/40 border-slate-700/40 hover:border-slate-600/50"
-                  : "bg-slate-900/20 border-slate-800/30 opacity-50"
+                ? "bg-slate-900/40 border-slate-700/40 hover:border-slate-600/50"
+                : "bg-slate-900/20 border-slate-800/30 opacity-50"
                 }`}
               data-testid={`contact-row-${contact.id}`}
             >

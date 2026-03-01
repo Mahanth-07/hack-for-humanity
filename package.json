@@ -8,6 +8,7 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
+    "test:risk-engine": "tsx --test server/modules/risk-analysis/engine.test.ts",
     "db:push": "drizzle-kit push",
     "seed": "tsx server/scripts/seed.ts",
     "db:studio": "drizzle-kit studio"

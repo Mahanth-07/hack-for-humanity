@@ -113,11 +113,18 @@ type CameraFeed = {
 };
 
 
+const SEV_LEFT_ACCENT: Record<string, string> = {
+  critical: "#ef4444",
+  high:     "#f97316",
+  medium:   "#f59e0b",
+  low:      "#3b82f6",
+};
+
 const SEVERITY_COLORS: Record<string, string> = {
-  critical: "bg-red-600 text-white",
-  high: "bg-orange-500 text-white",
-  medium: "bg-yellow-500 text-black",
-  low: "bg-blue-500 text-white",
+  critical: "bg-red-500/15 text-red-300 border border-red-500/40",
+  high:     "bg-orange-500/15 text-orange-300 border border-orange-500/40",
+  medium:   "bg-amber-500/15 text-amber-200 border border-amber-500/40",
+  low:      "bg-sky-500/15 text-sky-300 border border-sky-500/40",
 };
 
 const STATUS_BADGE: Record<string, { color: string; pulse: boolean }> = {
@@ -376,7 +383,7 @@ function CameraFeedCard({
   const hasVideo = localVideoUrl || feed.videoUrl;
 
   return (
-    <Card className="bg-slate-900/80 border-slate-700/50 overflow-hidden group relative" data-testid={`camera-card-${feed.id}`}>
+    <Card className="bg-slate-900/50 border-slate-700/40 overflow-hidden group relative" data-testid={`camera-card-${feed.id}`}>
       {/* Hidden canvas for frame extraction */}
       <canvas ref={canvasRef} className="hidden" />
 
@@ -1264,12 +1271,12 @@ function LiveIncidentFeed({
   };
 
   const cardBorderClasses = (rank: number, severity: string) => {
-    if (rank === 1) return "border-red-500/70 bg-red-500/8 shadow-[0_0_0_1px_rgba(239,68,68,0.25)]";
-    if (rank === 2) return "border-orange-500/60 bg-orange-500/6";
-    if (rank === 3) return "border-amber-500/60 bg-amber-500/6";
-    if (severity === "critical") return "border-red-500/30";
-    if (severity === "high") return "border-orange-500/30";
-    return "border-slate-700/50";
+    if (rank === 1) return "border-red-500/50 shadow-[0_0_14px_rgba(239,68,68,0.12)]";
+    if (rank === 2) return "border-orange-500/40";
+    if (rank === 3) return "border-amber-500/35";
+    if (severity === "critical") return "border-red-500/25";
+    if (severity === "high") return "border-orange-500/20";
+    return "border-slate-700/40";
   };
 
   return (
@@ -1288,9 +1295,11 @@ function LiveIncidentFeed({
               return (
                 <div
                   key={incident.id}
-                  className={`p-3 bg-slate-900/60 rounded-lg border hover:border-slate-600/50 transition-colors ${cardBorderClasses(incident.riskRank ?? 999, incident.severity)}`}
+                  className={`flex overflow-hidden rounded-lg border bg-slate-900/50 hover:bg-slate-900/80 transition-colors ${cardBorderClasses(incident.riskRank ?? 999, incident.severity)}`}
                   data-testid={`incident-card-${incident.id}`}
                 >
+                  <div className="w-[3px] shrink-0" style={{ background: SEV_LEFT_ACCENT[incident.severity] ?? "#475569" }} />
+                  <div className="flex-1 p-3">
                   <div className="flex items-start gap-2">
                     {/* Rank block */}
                     <div className={`shrink-0 min-w-[52px] rounded-md border px-1.5 py-1 text-center ${rankBadgeClasses(incident.severity)}`}>
@@ -1384,6 +1393,7 @@ function LiveIncidentFeed({
                     </div>
 
                   </div>
+                  </div>
                 </div>
               );
             })}
@@ -1416,9 +1426,11 @@ function FlaggedCallsQueue({
       {incidents.map((incident) => (
         <div
           key={incident.id}
-          className="p-3 bg-amber-950/20 rounded-lg border border-amber-700/35"
+          className="flex overflow-hidden rounded-lg border border-amber-700/30 bg-amber-950/15"
           data-testid={`flagged-call-${incident.id}`}
         >
+          <div className="w-[3px] shrink-0 rounded-l-lg bg-amber-500/70" />
+          <div className="flex-1 p-3">
           <div className="flex items-start gap-2.5">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 mb-1">
@@ -1453,6 +1465,7 @@ function FlaggedCallsQueue({
                 Discard
               </button>
             </div>
+          </div>
           </div>
         </div>
       ))}
@@ -1935,12 +1948,13 @@ export default function Dashboard() {
   const panelMotion = { duration: 0.32, ease: [0.22, 1, 0.36, 1] as const };
 
   return (
-    <div className="min-h-screen h-screen flex flex-col bg-slate-950 text-slate-200 overflow-x-hidden dark">
+    <div className="min-h-screen h-screen flex flex-col text-slate-200 overflow-x-hidden dark" style={{ background: "linear-gradient(160deg, #04070e 0%, #080d1b 45%, #04070e 100%)" }}>
       {/* Maximized Panel Overlay */}
       <AnimatePresence>
         {maximizedPanel && (
           <motion.div
-            className="fixed inset-0 z-50 flex flex-col bg-slate-950"
+            className="fixed inset-0 z-50 flex flex-col"
+            style={{ background: "linear-gradient(160deg, #04070e 0%, #080d1b 100%)" }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -1954,11 +1968,11 @@ export default function Dashboard() {
               transition={panelMotion}
               style={{ willChange: "transform, opacity, box-shadow" }}
             >
-              <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-slate-800">
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  {maximizedPanel === "map" && <><MapPin className="h-3.5 w-3.5" /> Incident Map</>}
-                  {maximizedPanel === "incidents" && <><Activity className="h-3.5 w-3.5 text-red-400" /> Live Incident Feed</>}
-                  {maximizedPanel === "cameras" && <><Camera className="h-3.5 w-3.5" /> Camera Feeds</>}
+              <div className="shrink-0 flex items-center justify-between px-5 py-2.5 border-b border-white/[0.05]" style={{ background: "linear-gradient(135deg, #06090f 0%, #0c1525 100%)" }}>
+                <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                  {maximizedPanel === "map" && <><div className="h-3 w-[3px] rounded-full bg-indigo-500" /><MapPin className="h-3.5 w-3.5 text-indigo-400" /> Incident Map</>}
+                  {maximizedPanel === "incidents" && <><div className="h-3 w-[3px] rounded-full bg-red-500" /><Activity className="h-3.5 w-3.5 text-red-400" /> Live Incident Feed</>}
+                  {maximizedPanel === "cameras" && <><div className="h-3 w-[3px] rounded-full bg-sky-500" /><Camera className="h-3.5 w-3.5 text-sky-400" /> Camera Feeds</>}
                 </span>
                 <button
                   onClick={() => setMaximizedPanel(null)}
@@ -2066,20 +2080,38 @@ export default function Dashboard() {
       </AnimatePresence>
 
       {/* Header Bar */}
-      <header className="shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-slate-800">
-        <div className="flex items-center gap-3">
-          <Shield className="h-6 w-6 text-red-500" />
+      <header
+        className="shrink-0 flex items-center justify-between px-5 py-3 border-b border-white/[0.05]"
+        style={{ background: "linear-gradient(135deg, #06090f 0%, #0c1525 50%, #06090f 100%)" }}
+      >
+        {/* Brand */}
+        <div className="flex items-center gap-3.5">
+          <div className="relative">
+            <div className="absolute inset-0 rounded-xl blur-lg opacity-50" style={{ background: "linear-gradient(135deg, #1e40af, #3b82f6)" }} />
+            <div
+              className="relative flex items-center justify-center w-9 h-9 rounded-xl border border-blue-500/25"
+              style={{ background: "linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 100%)" }}
+            >
+              <Shield className="h-5 w-5 text-white" />
+            </div>
+          </div>
           <div>
-            <h1 className="text-sm font-bold tracking-tight" data-testid="dashboard-title">INCIDENT RESPONSE CENTER</h1>
-            <p className="text-[10px] text-slate-500">Real-time monitoring & coordination</p>
+            <h1
+              className="text-base font-black leading-none"
+              data-testid="dashboard-title"
+              style={{ background: "linear-gradient(90deg, #f0f9ff 0%, #93c5fd 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}
+            >
+              GUARDIAN
+            </h1>
+            <p className="text-[9px] text-slate-500 tracking-[0.14em] uppercase mt-0.5">Emergency Response Platform</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          {/* Module health indicators */}
-          <div className="hidden md:flex items-center gap-3">
+        <div className="flex items-center gap-3">
+          {/* System status pill */}
+          <div className="hidden md:flex items-center gap-2.5 px-3 py-1.5 rounded-lg border border-slate-800/80 bg-slate-900/50">
+            <span className="text-[9px] text-slate-600 uppercase tracking-widest font-medium pr-2 border-r border-slate-800">Systems</span>
             {[
-
               { key: "risk_analysis", label: "Risk" },
               { key: "camera_processing", label: "Camera" },
               { key: "contact_management", label: "Contacts" },
@@ -2091,19 +2123,22 @@ export default function Dashboard() {
             ))}
           </div>
 
-          {/* Stats badges */}
+          {/* Stats */}
           <div className="flex items-center gap-2">
             {criticalCount > 0 && (
-              <Badge className="bg-red-600 text-white text-[10px] px-1.5 py-0 animate-pulse-status" data-testid="critical-badge">
-                {criticalCount} CRITICAL
-              </Badge>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-red-700/60 bg-red-950/50 animate-pulse-status" data-testid="critical-badge">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+                <span className="text-[10px] font-semibold text-red-300">{criticalCount} CRITICAL</span>
+              </div>
             )}
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-slate-700 text-slate-400" data-testid="active-count-badge">
-              {activeIncidents.length} Active
-            </Badge>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-700/70 text-amber-400">
-              {flaggedIncidents.length} Flagged
-            </Badge>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-700/60 bg-slate-800/60" data-testid="active-count-badge">
+              <Activity className="h-3 w-3 text-slate-400" />
+              <span className="text-[10px] text-slate-400">{activeIncidents.length} Active</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-amber-800/50 bg-amber-950/30">
+              <Flag className="h-3 w-3 text-amber-500" />
+              <span className="text-[10px] text-amber-400">{flaggedIncidents.length} Flagged</span>
+            </div>
           </div>
         </div>
       </header>
@@ -2112,9 +2147,10 @@ export default function Dashboard() {
       <main className="flex-1 grid grid-rows-[auto_1fr] gap-3 p-3 overflow-y-auto overflow-x-hidden min-h-0">
         {/* Row 1: Camera Feeds */}
         <section>
-          <div className="flex items-center gap-2 mb-2">
-            <Camera className="h-4 w-4 text-slate-500" />
-            <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Camera Feeds</h2>
+          <div className="flex items-center gap-2.5 mb-2.5">
+            <div className="h-4 w-[3px] rounded-full bg-sky-500" />
+            <Camera className="h-3.5 w-3.5 text-sky-400" />
+            <h2 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Camera Feeds</h2>
             <span className="text-[10px] text-slate-600">{cameraFeeds.filter((f) => f.isActive).length} active</span>
             <MaxBtn panel="cameras" />
           </div>
@@ -2146,11 +2182,12 @@ export default function Dashboard() {
 
           {/* Left: map (fills space) + contact directory (collapsed by default) */}
           <div className="flex flex-col gap-3 min-h-0">
-            <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col flex-1 min-h-0">
-              <CardHeader className="py-2 px-3 shrink-0">
+            <Card className="bg-slate-900/40 border-slate-800/70 overflow-hidden flex flex-col flex-1 min-h-0">
+              <CardHeader className="py-2 px-3 shrink-0 border-b border-slate-800/60">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                    <MapPin className="h-3.5 w-3.5" />
+                  <CardTitle className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                    <div className="h-3 w-[3px] rounded-full bg-indigo-500" />
+                    <MapPin className="h-3.5 w-3.5 text-indigo-400" />
                     Incident Map
                   </CardTitle>
                   <MaxBtn panel="map" />
@@ -2162,11 +2199,12 @@ export default function Dashboard() {
             </Card>
 
             {/* Contact Directory — header only; expand opens full-screen overlay */}
-            <Card className="bg-slate-900/50 border-slate-800 overflow-hidden shrink-0">
+            <Card className="bg-slate-900/40 border-slate-800/70 overflow-hidden shrink-0">
               <CardHeader className="py-2 px-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                    <Users className="h-3.5 w-3.5" />
+                  <CardTitle className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                    <div className="h-3 w-[3px] rounded-full bg-violet-500" />
+                    <Users className="h-3.5 w-3.5 text-violet-400" />
                     Contact Directory
                     <span className="text-[10px] text-slate-600 font-normal normal-case tracking-normal">({contacts.length})</span>
                   </CardTitle>
@@ -2183,10 +2221,11 @@ export default function Dashboard() {
 
             {/* Contacts full-screen overlay */}
             {contactsExpanded && (
-              <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col">
-                <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-slate-800">
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                    <Users className="h-3.5 w-3.5" /> Contact Directory
+              <div className="fixed inset-0 z-50 flex flex-col" style={{ background: "linear-gradient(160deg, #04070e 0%, #080d1b 100%)" }}>
+                <div className="shrink-0 flex items-center justify-between px-5 py-2.5 border-b border-white/[0.05]" style={{ background: "linear-gradient(135deg, #06090f 0%, #0c1525 100%)" }}>
+                  <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                    <div className="h-3 w-[3px] rounded-full bg-violet-500" />
+                    <Users className="h-3.5 w-3.5 text-violet-400" /> Contact Directory
                   </span>
                   <button
                     onClick={() => setContactsExpanded(false)}
@@ -2211,12 +2250,13 @@ export default function Dashboard() {
 
           {/* Right: live feed + flagged users review queue */}
           <div className="flex flex-col gap-3 min-h-0">
-            <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col min-h-[20rem] lg:min-h-0 lg:flex-1">
-              <CardHeader className="py-2 px-3 shrink-0">
+            <Card className="bg-slate-900/40 border-slate-800/70 overflow-hidden flex flex-col min-h-[20rem] lg:min-h-0 lg:flex-1">
+              <CardHeader className="py-2 px-3 shrink-0 border-b border-slate-800/60">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                  <CardTitle className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                    <div className="h-3 w-[3px] rounded-full bg-red-500" />
                     <Activity className="h-3.5 w-3.5 text-red-400" />
-                    Live Interaction Feed
+                    Live Incident Feed
                     {liveIncidents.length > 0 && (
                       <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse-status" />
                     )}
@@ -2241,12 +2281,13 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
-            <Card className="bg-slate-900/50 border-amber-800/40 overflow-hidden flex flex-col min-h-[13rem] lg:max-h-[34vh]" data-testid="flagged-users-section">
-              <CardHeader className="py-2 px-3 shrink-0 border-b border-amber-900/30">
-                <CardTitle className="text-xs font-semibold text-amber-500/90 uppercase tracking-wider flex items-center gap-2">
-                  <Flag className="h-3.5 w-3.5" />
-                  Flagged Users
-                  <span className="text-amber-600/70 font-normal normal-case tracking-normal">
+            <Card className="bg-amber-950/10 border-amber-800/30 overflow-hidden flex flex-col min-h-[13rem] lg:max-h-[34vh]" data-testid="flagged-users-section">
+              <CardHeader className="py-2 px-3 shrink-0 border-b border-amber-900/25">
+                <CardTitle className="text-xs font-semibold text-amber-400 uppercase tracking-wider flex items-center gap-2">
+                  <div className="h-3 w-[3px] rounded-full bg-amber-500" />
+                  <Flag className="h-3.5 w-3.5 text-amber-500" />
+                  Flagged for Review
+                  <span className="text-amber-700/80 font-normal normal-case tracking-normal">
                     ({flaggedIncidents.length})
                   </span>
                 </CardTitle>

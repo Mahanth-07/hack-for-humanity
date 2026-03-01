@@ -172,12 +172,6 @@ def build_dynamic_vars(incident: dict, contact: dict, risk: dict | None) -> tupl
         f"Status: {status}",
     ]
     if risk:
-        score = risk.get("risk_score") or risk.get("riskScore", "N/A")
-        threat = risk.get("threat_level") or risk.get("threatLevel", "unknown")
-        context_parts.append(f"Risk engine score: {score}/100 ({threat}) — may be lower for new incidents with limited history")
-        analysis = risk.get("analysis", "")
-        if analysis:
-            context_parts.append(f"Analysis: {analysis}")
         recommendations = risk.get("recommendations") or []
         if isinstance(recommendations, str):
             try:
@@ -186,8 +180,6 @@ def build_dynamic_vars(incident: dict, contact: dict, risk: dict | None) -> tupl
                 recommendations = [recommendations]
         if recommendations:
             context_parts.append("Recommended actions: " + "; ".join(str(r) for r in recommendations[:3]))
-    else:
-        context_parts.append("Risk assessment: pending")
     caller_context = ". ".join(context_parts) + "."
 
     return camera_facts, location, caller_context

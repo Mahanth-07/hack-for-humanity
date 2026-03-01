@@ -258,8 +258,6 @@ function CameraFeedCard({
         onVideoUploaded();
         onIncidentCreated(); // Force refresh to fetch the backfilled URLs
 
-        // Immediately show location input so user can tag it while it processes
-        setShowLocationInput(true);
         toast({ title: "Video Uploaded", description: `${feed.name} feed updated. Please set a location.` });
 
         const videoUrl = `/api/video/${encodeURIComponent(response.objectPath)}`;
@@ -282,6 +280,7 @@ function CameraFeedCard({
     }
     const objectUrl = URL.createObjectURL(file);
     setLocalVideoUrl(objectUrl);
+    setShowLocationInput(true); // Instantly show location input on file select
     uploadFile(file);
   }, [uploadFile, toast]);
 

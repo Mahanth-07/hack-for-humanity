@@ -2,9 +2,52 @@ import { Router, Request, Response } from "express";
   import { db } from "../../db";
   import { riskAssessments, incidents } from "@shared/schema";
   import { eq, desc } from "drizzle-orm";
-  import { openai } from "../../replit_integrations/audio/client";
 
   const router = Router();
+
+// Helper functions for rule-based risk assessment
+function calculateRiskScore(incident: any): number {
+  let score = 50;
+  
+  if (incident.severity === 'critical') score += 40;
+  else if (incident.severity === 'high') score += 25;
+  else if (incident.severity === 'medium') score += 10;
+  else score -= 10;
+  
+  if (incident.status === 'active') score += 10;
+  
+  return Math.min(100, Math.max(0, score));
+}
+
+function determineThreatLevel(riskScore: number): string {
+  if (riskScore >= 80) return 'severe';
+  if (riskScore >= 60) return 'high';
+  if (riskScore >= 40) return 'moderate';
+  return 'low';
+}
+
+function generateAnalysis(incident: any, riskScore: number): string {
+  return `Risk assessment for ${incident.title}: ${incident.severity} severity incident with a calculated risk score of ${riskScore}. ${incident.description}`;
+}
+
+function generateRecommendations(incident: any): string[] {
+  const recs = [];
+  if (incident.severity === 'critical' || incident.severity === 'high') {
+    recs.push('Immediate response required');
+    recs.push('Alert emergency services');
+    recs.push('Notify all relevant contacts');
+  } else {
+    recs.push('Monitor situation closely');
+    recs.push('Prepare response team');
+  }
+  return recs;
+}
+
+function identifyRiskFactors(incident: any): string[] {
+  const factors = [`Severity: ${incident.severity}`, `Status: ${incident.status}`];
+  if (incident.location) factors.push(`Location: ${incident.location}`);
+  return factors;
+}
 
   // Get all risk assessments
   router.get("/", async (req: Request, res: Response) => {
@@ -23,11 +66,11 @@ import { Router, Request, Response } from "express";
   // Get risk assessment for specific incident
   router.get("/incident/:incidentId", async (req: Request, res: Response) => {
     try {
-      const incidentId = parseInt(req.params.incidentId);
+      const id = parseInt(req.params.incidentId as string);
       const assessment = await db
         .select()
         .from(riskAssessments)
-        .where(eq(riskAssessments.incidentId, incidentId))
+        .where(eq(riskAssessments.incidentId, id))
         .orderBy(desc(riskAssessments.createdAt))
         .limit(1);
 
@@ -41,7 +84,7 @@ import { Router, Request, Response } from "express";
   // Create AI-powered risk assessment
   router.post("/analyze/:incidentId", async (req: Request, res: Response) => {
     try {
-      const incidentId = parseInt(req.params.incidentId);
+      const incidentId = parseInt(req.params.incidentId as string);
 
       // Get incident details
       const [incident] = await db
@@ -54,23 +97,20 @@ import { Router, Request, Response } from "express";
         return res.status(404).json({ error: "Incident not found" });
       }
 
-      // Use AI to analyze risk
-      const completion = await openai.chat.completions.create({
-        model: "gpt-5.2",
-        messages: [
-          {
-            role: "system",
-            content: "You are an emergency response risk analyst. Analyze the incident and provide a risk score (0-100), threat level (low/moderate/high/severe), detailed analysis, and specific recommendations. Respond in JSON format with keys: riskScore, threatLevel, analysis, recommendations (array), factors (array)."
-          },
-          {
-            role: "user",
-            content: `Analyze this emergency incident:\n\nTitle: ${incident.title}\nDescription: ${incident.description}\nSeverity: ${incident.severity}\nLocation: ${incident.location || "Unknown"}\n\nProvide comprehensive risk assessment.`
-          }
-        ],
-        response_format: { type: "json_object" }
-      });
+      // Calculate risk based on incident properties
+      const riskScore = calculateRiskScore(incident);
+      const threatLevel = determineThreatLevel(riskScore);
+      const analysis = generateAnalysis(incident, riskScore);
+      const recommendations = generateRecommendations(incident);
+      const factors = identifyRiskFactors(incident);
 
-      const aiAnalysis = JSON.parse(completion.choices[0].message.content || "{}");
+      const aiAnalysis = {
+        riskScore,
+        threatLevel,
+        analysis,
+        recommendations,
+        factors
+      };
 
       // Store risk assessment
       const [assessment] = await db
@@ -120,24 +160,21 @@ import { Router, Request, Response } from "express";
           }
         }
 
-        // Create new assessment using AI
+        // Create new assessment using rule-based logic
         try {
-          const completion = await openai.chat.completions.create({
-            model: "gpt-5.2",
-            messages: [
-              {
-                role: "system",
-                content: "You are an emergency response risk analyst. Analyze incidents and provide risk scores, threat levels, and recommendations in JSON format."
-              },
-              {
-                role: "user",
-                content: `Analyze: ${incident.title}. ${incident.description}. Severity: ${incident.severity}.`
-              }
-            ],
-            response_format: { type: "json_object" }
-          });
+          const riskScore = calculateRiskScore(incident);
+          const threatLevel = determineThreatLevel(riskScore);
+          const analysis = generateAnalysis(incident, riskScore);
+          const recommendations = generateRecommendations(incident);
+          const factors = identifyRiskFactors(incident);
 
-          const aiAnalysis = JSON.parse(completion.choices[0].message.content || "{}");
+          const aiAnalysis = {
+            riskScore,
+            threatLevel,
+            analysis,
+            recommendations,
+            factors
+          };
 
           const [assessment] = await db
             .insert(riskAssessments)

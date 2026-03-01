@@ -50,7 +50,7 @@ import { Router, Request, Response } from "express";
   // Toggle camera feed status
   router.patch("/feeds/:id/toggle", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
 
       const [feed] = await db
         .select()
@@ -93,7 +93,7 @@ import { Router, Request, Response } from "express";
   // Get detections for specific camera
   router.get("/detections/camera/:cameraId", async (req: Request, res: Response) => {
     try {
-      const cameraId = parseInt(req.params.cameraId);
+      const cameraId = parseInt(req.params.cameraId as string);
       const detections = await db
         .select()
         .from(cameraDetections)
@@ -205,7 +205,7 @@ import { Router, Request, Response } from "express";
   // Update camera feed video URL (after MP4 upload)
   router.patch("/feeds/:id/video", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       const { videoUrl } = req.body;
 
       if (!videoUrl) {
@@ -232,7 +232,7 @@ import { Router, Request, Response } from "express";
   // Update camera feed status
   router.patch("/feeds/:id/status", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       const { status } = req.body;
 
       const validStatuses = ["idle", "analyzing", "incident", "calling", "resolved"];
@@ -260,7 +260,7 @@ import { Router, Request, Response } from "express";
   // Simulate camera detection (for testing)
   router.post("/simulate/:cameraId", async (req: Request, res: Response) => {
     try {
-      const cameraId = parseInt(req.params.cameraId);
+      const cameraId = parseInt(req.params.cameraId as string);
       const { detectionType = "anomaly", confidence = 85 } = req.body;
 
       const [detection] = await db

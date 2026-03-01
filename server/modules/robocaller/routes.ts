@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
   import { db } from "../../db";
   import { robocalls, contacts, incidents } from "@shared/schema";
-  import { eq, desc } from "drizzle-orm";
+  import { eq, desc, sql } from "drizzle-orm";
   import { openai } from "../../replit_integrations/audio/client";
 
   const router = Router();
@@ -57,7 +57,7 @@ import { Router, Request, Response } from "express";
   // Initiate robocall for incident
   router.post("/incident/:incidentId", async (req: Request, res: Response) => {
     try {
-      const incidentId = parseInt(req.params.incidentId);
+      const incidentId = parseInt(req.params.incidentId as string);
       const { priority = 1 } = req.body;
 
       // Get incident details
@@ -110,14 +110,14 @@ import { Router, Request, Response } from "express";
   // Update robocall status
   router.patch("/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       const { status } = req.body;
 
       const [updated] = await db
         .update(robocalls)
         .set({
           status,
-          attempts: status === "calling" ? db.$increment(robocalls.attempts, 1) : undefined,
+          attempts: status === "calling" ? sql`${robocalls.attempts} + 1` : undefined,
           lastAttemptAt: status === "calling" ? new Date() : undefined,
           completedAt: status === "completed" ? new Date() : undefined,
         })

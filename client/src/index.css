@@ -229,4 +229,92 @@
   .animate-scan {
     animation: scan-line 3s linear infinite;
   }
+
+  @keyframes voice-ring {
+    0% {
+      transform: scale(0.9);
+      opacity: 0.5;
+    }
+    70% {
+      transform: scale(1.7);
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1.9);
+      opacity: 0;
+    }
+  }
+
+  @keyframes voice-bar {
+    0%, 100% { transform: scaleY(0.35); }
+    45% { transform: scaleY(1); }
+    75% { transform: scaleY(0.55); }
+  }
+
+  .voice-memo-badge {
+    position: relative;
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .voice-memo-ring {
+    position: absolute;
+    inset: -2px;
+    border-radius: 9999px;
+    background: rgba(248, 113, 113, 0.3);
+    animation: voice-ring 1.9s ease-out infinite;
+  }
+
+  .voice-memo-ring-2 {
+    animation-delay: 0.8s;
+  }
+
+  .voice-memo-core {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    border-radius: 9999px;
+    background: #ef4444;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.35);
+  }
+
+  .voice-memo-bars {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    height: 9px;
+  }
+
+  .voice-memo-bar {
+    width: 2px;
+    height: 100%;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.95);
+    transform-origin: center bottom;
+    animation: voice-bar 0.85s ease-in-out infinite;
+  }
+
+  .voice-memo-bar:nth-child(1) { height: 5px; animation-delay: 0.05s; }
+  .voice-memo-bar:nth-child(2) { height: 8px; animation-delay: 0.2s; }
+  .voice-memo-bar:nth-child(3) { height: 6px; animation-delay: 0.32s; }
+  .voice-memo-bar:nth-child(4) { height: 9px; animation-delay: 0.12s; }
+  .voice-memo-bar:nth-child(5) { height: 5px; animation-delay: 0.26s; }
+
+  .waveform-bar {
+    display: inline-block;
+    width: 3px;
+    height: 12px;
+    border-radius: 2px;
+    background-color: currentColor;
+    transform-origin: bottom center;
+    animation: voice-bar 0.85s ease-in-out infinite;
+  }
 }

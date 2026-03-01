@@ -958,7 +958,7 @@ function ContactsTable({
   };
 
   return (
-    <div className="h-full flex flex-col px-1" data-testid="contacts-table">
+    <div className="h-full flex flex-col px-1 min-h-0" data-testid="contacts-table">
       <div className="flex items-center justify-between mb-4">
         <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{contacts.length} contacts</span>
         <Button
@@ -1151,7 +1151,7 @@ function RobocallerConsole({ robocalls, incidents }: { robocalls: Robocall[]; in
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#0F0F0F] rounded-xl border border-border/80 overflow-hidden shadow-inner" data-testid="robocaller-console">
+    <div className="h-full flex flex-col min-h-0 bg-[#0F0F0F] rounded-xl border border-border/80 overflow-hidden shadow-inner" data-testid="robocaller-console">
       <div className="flex items-center gap-2 px-3 py-2 bg-[#1A1A1A] border-b border-[#2A2A2A]">
         <Terminal className="h-3.5 w-3.5 text-green-500" />
         <span className="text-[11px] font-mono font-bold text-green-500">robocaller@emergency</span>
@@ -1466,7 +1466,7 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="h-screen flex flex-col bg-background text-foreground overflow-hidden font-sans">
+    <div className="min-h-screen flex flex-col bg-background text-foreground font-sans">
       {/* Maximized Panel Overlay */}
       <AnimatePresence>
         {maximizedPanel && (
@@ -1584,7 +1584,7 @@ export default function Dashboard() {
       </header>
 
       {/* Main Grid */}
-      <main className="flex-1 flex flex-col lg:grid lg:grid-rows-[auto_1fr_1fr] gap-4 p-4 lg:p-6 lg:gap-6 overflow-y-auto lg:overflow-hidden min-h-0 bg-background">
+      <main className="flex-1 flex flex-col gap-4 p-4 lg:p-6 lg:gap-6 bg-background">
         {/* Row 1: Camera Feeds */}
         <section className="staggered-fade-in delay-100">
           <div className="flex items-center gap-2 mb-3">
@@ -1617,8 +1617,8 @@ export default function Dashboard() {
         </section>
 
         {/* Row 2: Map + Incident Feed */}
-        <section className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-4 lg:gap-6 min-h-0 staggered-fade-in delay-200">
-          <motion.div layoutId="map" className="h-[400px] lg:h-full shrink-0">
+        <section className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-4 lg:gap-6 min-h-[500px] staggered-fade-in delay-200">
+          <motion.div layoutId="map" className="min-h-[400px] h-full w-full">
             <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
               <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-muted/30">
                 <div className="flex items-center justify-between">
@@ -1635,7 +1635,7 @@ export default function Dashboard() {
             </Card>
           </motion.div>
 
-          <motion.div layoutId="incidents" className="h-[500px] lg:h-full shrink-0">
+          <motion.div layoutId="incidents" className="min-h-[500px] h-full w-full">
             <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
               <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-muted/30">
                 <div className="flex items-center justify-between">
@@ -1673,8 +1673,8 @@ export default function Dashboard() {
         </section>
 
         {/* Row 3: Contacts + Robocaller Console */}
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 min-h-0 staggered-fade-in delay-300">
-          <motion.div layoutId="contacts" className="h-[400px] lg:h-full shrink-0">
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 min-h-[500px] staggered-fade-in delay-300">
+          <motion.div layoutId="contacts" className="min-h-[400px] h-full w-full">
             <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
               <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-muted/30">
                 <div className="flex items-center justify-between">
@@ -1697,7 +1697,7 @@ export default function Dashboard() {
             </Card>
           </motion.div>
 
-          <motion.div layoutId="robocaller" className="h-[400px] lg:h-full shrink-0">
+          <motion.div layoutId="robocaller" className="min-h-[400px] h-full w-full">
             <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
               <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-muted/30">
                 <div className="flex items-center justify-between">

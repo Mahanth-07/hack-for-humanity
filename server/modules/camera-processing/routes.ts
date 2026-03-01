@@ -116,37 +116,67 @@ import { Router, Request, Response } from "express";
         return res.status(400).json({ error: "Camera feed ID is required" });
       }
 
-      // Use GPT-5.2 with vision for image analysis
+      if (!imageUrl && !imageData) {
+        return res.status(400).json({ error: "imageUrl or imageData is required" });
+      }
+
+      const imageSource = imageUrl || `data:image/jpeg;base64,${imageData}`;
+
+      // Use GPT-4o with vision for image analysis
       const completion = await openai.chat.completions.create({
-        model: "gpt-5.2",
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
-            content: "You are an emergency response AI analyzing security camera footage. Detect any emergencies, hazards, or unusual activities. Respond in JSON format with keys: detectionType (fire/person/vehicle/anomaly/none), confidence (0-100), description, boundingBox (if applicable), urgency (low/medium/high/critical)."
+            content: `You are an emergency response AI analyzing security camera footage frames for public safety threats. Your job is to catch emergencies early, even if partial — err on the side of reporting.
+Detect ANY of the following, even if they occupy a small portion of the frame: fires, floods, vehicle crashes (car on sidewalk, collision, rollover), fights/assaults, weapons, chemical spills, gas leaks, structural collapse, drowning, medical emergencies, looting, arson, or environmental hazards.
+Be sensitive — if you see a car mounting a curb, pedestrians being struck, smoke, flames, or any violent activity, report it. A small but clear emergency in one corner of the frame still counts.
+Respond ONLY with valid JSON using these exact keys:
+- detectionType: one of "fire", "flood", "crash", "fight", "weapon", "hazmat", "structural", "medical", "environmental", "anomaly", or "none"
+- confidence: integer 0-100
+- description: brief string describing what was detected (or "No threats detected" if none)
+- urgency: one of "low", "medium", "high", "critical", or "none"
+- humanLifePresent: boolean — true if any people are visible or likely present in the scene
+- animalsPresent: boolean — true if any animals are visible in the scene
+- inanimateObjects: string — brief comma-separated list of key objects visible (e.g. "vehicle, fire extinguisher, shelving")
+- sceneContext: string — one sentence describing the environment/setting useful for first responders (e.g. "Multi-story parking garage with active fire on level 2 near stairwell exit")
+If no threat is detected, return detectionType "none" and urgency "none". Still fill in humanLifePresent, animalsPresent, inanimateObjects, and sceneContext based on what is visible.`
           },
           {
             role: "user",
             content: [
               {
                 type: "text",
-                text: "Analyze this camera image for any emergency situations or threats."
+                text: "Analyze this security camera frame for any public safety hazards or emergencies."
               },
               {
                 type: "image_url",
                 image_url: {
-                  url: imageUrl || `data:image/jpeg;base64,${imageData}`
+                  url: imageSource,
+                  detail: "high"
                 }
               }
             ]
           }
         ],
-        response_format: { type: "json_object" }
+        response_format: { type: "json_object" },
+        max_tokens: 500,
       });
 
       const aiDetection = JSON.parse(completion.choices[0].message.content || "{}");
 
       // Only store if something was detected
       if (aiDetection.detectionType && aiDetection.detectionType !== "none") {
+        // Build enriched metadata from AI response
+        const enrichedMetadata = {
+          description: aiDetection.description,
+          urgency: aiDetection.urgency,
+          humanLifePresent: aiDetection.humanLifePresent ?? false,
+          animalsPresent: aiDetection.animalsPresent ?? false,
+          inanimateObjects: aiDetection.inanimateObjects || "",
+          sceneContext: aiDetection.sceneContext || "",
+        };
+
         const [detection] = await db
           .insert(cameraDetections)
           .values({
@@ -155,15 +185,12 @@ import { Router, Request, Response } from "express";
             confidence: aiDetection.confidence || 0,
             imageUrl: imageUrl || null,
             boundingBox: aiDetection.boundingBox || null,
-            metadata: {
-              description: aiDetection.description,
-              urgency: aiDetection.urgency
-            },
+            metadata: enrichedMetadata,
           })
           .returning();
 
-        // Auto-create incident for high-urgency detections
-        if (aiDetection.urgency === "critical" || aiDetection.urgency === "high") {
+        // Auto-create incident for medium-or-higher urgency detections
+        if (aiDetection.urgency === "critical" || aiDetection.urgency === "high" || aiDetection.urgency === "medium") {
           const [camera] = await db
             .select()
             .from(cameraFeeds)
@@ -171,12 +198,29 @@ import { Router, Request, Response } from "express";
             .limit(1);
 
           if (camera) {
+            // Update camera status to "incident"
+            await db
+              .update(cameraFeeds)
+              .set({ status: "incident" })
+              .where(eq(cameraFeeds.id, cameraFeedId));
+
+            const label = aiDetection.detectionType.charAt(0).toUpperCase() + aiDetection.detectionType.slice(1);
+
+            // Build enriched incident description for first responders
+            const parts: string[] = [aiDetection.description || "Automated camera detection"];
+            if (aiDetection.sceneContext) parts.push(aiDetection.sceneContext);
+            if (aiDetection.humanLifePresent) parts.push("Human life present.");
+            else parts.push("No human life detected.");
+            if (aiDetection.animalsPresent) parts.push("Animals present.");
+            if (aiDetection.inanimateObjects) parts.push(`Objects visible: ${aiDetection.inanimateObjects}.`);
+            const enrichedDescription = parts.join(" ");
+
             const [incident] = await db
               .insert(incidents)
               .values({
-                title: `Camera Detection: ${aiDetection.detectionType}`,
-                description: aiDetection.description || "Automated camera detection",
-                severity: aiDetection.urgency === "critical" ? "critical" : "high",
+                title: `${label} Detected — ${camera.name}`,
+                description: enrichedDescription,
+                severity: aiDetection.urgency === "critical" ? "critical" : aiDetection.urgency === "high" ? "high" : "medium",
                 status: "active",
                 location: camera.location,
               })
@@ -188,13 +232,13 @@ import { Router, Request, Response } from "express";
               .set({ incidentId: incident.id })
               .where(eq(cameraDetections.id, detection.id));
 
-            return res.json({ detection, incident, autoCreated: true });
+            return res.json({ detection, incident, autoCreated: true, cameraName: camera.name });
           }
         }
 
         res.json({ detection, autoCreated: false });
       } else {
-        res.json({ detection: null, message: "No threats detected" });
+        res.json({ detection: null, autoCreated: false, message: "No threats detected" });
       }
     } catch (error) {
       console.error("Error processing detection:", error);
@@ -202,19 +246,20 @@ import { Router, Request, Response } from "express";
     }
   });
 
-  // Update camera feed video URL (after MP4 upload)
+  // Update camera feed video URL (after MP4 upload). Pass null to clear the video.
   router.patch("/feeds/:id/video", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id as string);
       const { videoUrl } = req.body;
 
-      if (!videoUrl) {
-        return res.status(400).json({ error: "videoUrl is required" });
+      // videoUrl may be a string (set) or explicitly null (clear)
+      if (videoUrl === undefined) {
+        return res.status(400).json({ error: "videoUrl is required (pass null to clear)" });
       }
 
       const [updated] = await db
         .update(cameraFeeds)
-        .set({ videoUrl, status: "idle" })
+        .set({ videoUrl: videoUrl ?? null, status: "idle" })
         .where(eq(cameraFeeds.id, id))
         .returning();
 
@@ -226,6 +271,33 @@ import { Router, Request, Response } from "express";
     } catch (error) {
       console.error("Error updating camera video:", error);
       res.status(500).json({ error: "Failed to update camera video" });
+    }
+  });
+
+  // Update camera feed location
+  router.patch("/feeds/:id/location", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      const { location } = req.body;
+
+      if (!location || typeof location !== "string" || !location.trim()) {
+        return res.status(400).json({ error: "location is required" });
+      }
+
+      const [updated] = await db
+        .update(cameraFeeds)
+        .set({ location: location.trim() })
+        .where(eq(cameraFeeds.id, id))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ error: "Camera feed not found" });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating camera location:", error);
+      res.status(500).json({ error: "Failed to update camera location" });
     }
   });
 
@@ -254,6 +326,58 @@ import { Router, Request, Response } from "express";
     } catch (error) {
       console.error("Error updating camera status:", error);
       res.status(500).json({ error: "Failed to update camera status" });
+    }
+  });
+
+  // Disconnect camera feed: clear video, reset location, resolve linked incidents
+  router.post("/feeds/:id/disconnect", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string);
+
+      // Get the camera to find its current location
+      const [camera] = await db
+        .select()
+        .from(cameraFeeds)
+        .where(eq(cameraFeeds.id, id))
+        .limit(1);
+
+      if (!camera) {
+        return res.status(404).json({ error: "Camera feed not found" });
+      }
+
+      // Clear video URL and reset status + location
+      const [updated] = await db
+        .update(cameraFeeds)
+        .set({ videoUrl: null, status: "idle", location: "Unassigned" })
+        .where(eq(cameraFeeds.id, id))
+        .returning();
+
+      // Resolve any active incidents that were created from this camera
+      // Match by camera name in title (format: "X Detected — Camera N")
+      const allActiveIncidents = await db
+        .select()
+        .from(incidents)
+        .where(eq(incidents.status, "active"));
+
+      const cameraIncidents = allActiveIncidents.filter(
+        (inc) => inc.title.includes(`— ${camera.name}`) || inc.location === camera.location
+      );
+
+      if (cameraIncidents.length > 0) {
+        await Promise.all(
+          cameraIncidents.map((inc) =>
+            db
+              .update(incidents)
+              .set({ status: "resolved", resolvedAt: new Date(), updatedAt: new Date() })
+              .where(eq(incidents.id, inc.id))
+          )
+        );
+      }
+
+      res.json({ updated, resolvedIncidents: cameraIncidents.length });
+    } catch (error) {
+      console.error("Error disconnecting camera feed:", error);
+      res.status(500).json({ error: "Failed to disconnect camera feed" });
     }
   });
 

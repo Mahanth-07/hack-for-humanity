@@ -4,7 +4,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-"dev": "NODE_ENV=development tsx --env-file=.env server/index.ts",
+    "dev": "NODE_ENV=development tsx --env-file=.env server/index.ts",
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
@@ -70,6 +70,7 @@
     "react-hook-form": "^7.55.0",
     "react-icons": "^5.4.0",
     "react-resizable-panels": "^2.1.7",
+    "react-simple-maps": "^3.0.0",
     "recharts": "^2.15.2",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",

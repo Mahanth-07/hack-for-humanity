@@ -7,6 +7,7 @@ import type { Express } from "express";
   import cameraProcessingRouter from "./modules/camera-processing/routes";
   import contactManagementRouter from "./modules/contact-management/routes";
   import { registerObjectStorageRoutes } from "./replit_integrations/object_storage/routes";
+import "./modules/robocall-watcher";
 
   export async function registerRoutes(
     httpServer: Server,

@@ -12,42 +12,42 @@
   --elevate-1: rgba(0, 0, 0, .03);
   --elevate-2: rgba(0, 0, 0, .08);
 
-  /* Layout and structural colors */
-  --background: 40 14% 95%;
-  /* Warm off-white #F5F4F2 */
-  --foreground: 0 0% 24%;
-  /* Body #3D3D3D */
-  --border: 45 11% 90%;
-  /* Soft warm separator #E8E6E1 */
-  --card: 0 0% 100%;
-  /* Pure white #FFFFFF */
-  --card-foreground: 0 0% 6%;
-  /* Headings #0F0F0F */
-  --card-border: 45 11% 90%;
-  /* Same as border */
+  /* Solarpunk Layout and structural colors */
+  --background: 68 20% 94%;
+  /* Warm sunlit sage/beige #F4F5ED */
+  --foreground: 130 20% 14%;
+  /* Deep forest green body #1C2A1E */
+  --border: 68 20% 85%;
+  /* Earthy tone separator #DCE0D3 */
+  --card: 50 40% 97%;
+  /* Soft parchment white #FBFAF5 */
+  --card-foreground: 130 25% 10%;
+  /* Deep forest green headings */
+  --card-border: 68 20% 85%;
 
   /* Sidebar colors */
-  --sidebar: 40 14% 95%;
-  --sidebar-foreground: 0 0% 24%;
-  --sidebar-border: 45 11% 90%;
-  --sidebar-primary: 219 48% 20%;
-  /* Slate-blue primary #1A2B4A */
+  --sidebar: 50 40% 97%;
+  --sidebar-foreground: 130 20% 14%;
+  --sidebar-border: 68 20% 85%;
+  --sidebar-primary: 123 46% 34%;
+  /* Hopeful green #2E7D32 */
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 40 10% 90%;
-  --sidebar-accent-foreground: 0 0% 6%;
-  --sidebar-ring: 219 48% 20%;
+  --sidebar-accent: 68 20% 90%;
+  --sidebar-accent-foreground: 130 25% 10%;
+  --sidebar-ring: 123 46% 34%;
 
   /* Core interactive colors */
-  --primary: 219 48% 20%;
-  /* Slate-blue #1A2B4A */
+  --primary: 123 46% 34%;
+  /* Hopeful green #2E7D32 */
   --primary-foreground: 0 0% 100%;
-  --secondary: 40 10% 92%;
-  --secondary-foreground: 0 0% 6%;
-  --muted: 0 0% 96%;
-  --muted-foreground: 30 2% 53%;
-  /* Muted secondary #8A8784 */
-  --accent: 40 10% 92%;
-  --accent-foreground: 0 0% 6%;
+  --secondary: 68 20% 90%;
+  /* Muted earthy accent */
+  --secondary-foreground: 130 20% 14%;
+  --muted: 68 20% 88%;
+  --muted-foreground: 130 11% 33%;
+  /* Lighter forest green #4A5D4E */
+  --accent: 68 20% 90%;
+  --accent-foreground: 130 20% 14%;
 
   /* Status/Feedback colors - Refined */
   --popover: 0 0% 100%;
@@ -63,10 +63,10 @@
   --chart-4: 199 89% 48%;
   --chart-5: 142 71% 45%;
 
-  /* Typography */
-  --font-sans: 'DM Sans', sans-serif;
-  --font-heading: 'Outfit', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', Menlo, monospace;
+  /* Solarpunk High-Contrast Typography */
+  --font-sans: 'Space Grotesk', sans-serif;
+  --font-heading: 'Fraunces', serif;
+  --font-mono: 'Space Grotesk', monospace;
 
   /* Shared structural */
   --radius: 0.75rem;
@@ -115,7 +115,7 @@
   h5,
   h6 {
     font-family: var(--font-heading);
-    @apply text-card-foreground font-semibold tracking-tight;
+    @apply text-card-foreground font-black tracking-tight;
   }
 }
 
@@ -129,10 +129,6 @@
     color: hsl(var(--muted-foreground));
     pointer-events: none;
   }
-
-  .no-default-hover-elevate {}
-
-  .no-default-active-elevate {}
 
   .toggle-elevate::before,
   .toggle-elevate-2::before {
@@ -222,15 +218,17 @@
 
   /* Custom SaaS Utilities & Animations */
   .saas-card {
-    @apply bg-card border-none rounded-xl shadow-sm transition-all duration-300;
+    @apply bg-card border border-border shadow-sm transition-all duration-300;
+    border-radius: 1.5rem;
+    /* Organic corners */
   }
 
   .saas-card-hover {
-    @apply hover:-translate-y-[2px] hover:shadow-md;
+    @apply hover:-translate-y-1 hover:scale-[1.01] hover:shadow-lg transition-all duration-500 ease-out cursor-pointer;
   }
 
   .saas-section-label {
-    @apply text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4;
+    @apply text-2xl lg:text-3xl font-black text-card-foreground tracking-tight mb-4 font-heading;
   }
 
   .staggered-fade-in {

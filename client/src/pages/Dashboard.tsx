@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 // @ts-ignore – no type declarations bundled with react-simple-maps
 import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
@@ -1467,69 +1468,78 @@ export default function Dashboard() {
   return (
     <div className="h-screen flex flex-col bg-background text-foreground overflow-hidden font-sans">
       {/* Maximized Panel Overlay */}
-      {maximizedPanel && (
-        <div className="fixed inset-0 z-50 bg-background flex flex-col">
-          <div className="shrink-0 flex items-center justify-between px-4 py-3 bg-white border-b border-border shadow-xs">
-            <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2 font-heading">
-              {maximizedPanel === "map" && <><MapPin className="h-3.5 w-3.5" /> Incident Map</>}
-              {maximizedPanel === "incidents" && <><Activity className="h-3.5 w-3.5 text-red-500" /> Live Incident Feed</>}
-              {maximizedPanel === "contacts" && <><Users className="h-3.5 w-3.5" /> Contact Directory</>}
-              {maximizedPanel === "robocaller" && <><Phone className="h-3.5 w-3.5 text-primary" /> Robocaller Console</>}
-              {maximizedPanel === "cameras" && <><Camera className="h-3.5 w-3.5" /> Camera Feeds</>}
-            </span>
-            <button
-              onClick={() => setMaximizedPanel(null)}
-              className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors px-2 py-1.5 rounded-md hover:bg-secondary"
-            >
-              <Minimize2 className="h-3.5 w-3.5" />
-              Minimize
-            </button>
-          </div>
-          <div className="flex-1 min-h-0 p-3 overflow-hidden">
-            {maximizedPanel === "map" && <IncidentMap incidents={incidents} />}
-            {maximizedPanel === "incidents" && (
-              <div className="h-full flex flex-col">
-                {activeIncidents.length > 0 && (
-                  <div className="shrink-0 flex justify-end mb-2">
-                    <button
-                      onClick={clearAllIncidents}
-                      className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive transition-colors"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      Clear all
-                    </button>
+      <AnimatePresence>
+        {maximizedPanel && (
+          <motion.div
+            layoutId={maximizedPanel}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="fixed inset-0 z-50 bg-background flex flex-col overflow-hidden"
+          >
+            <div className="shrink-0 flex items-center justify-between px-6 py-5 bg-white border-b border-border shadow-xs">
+              <span className="text-2xl lg:text-3xl font-black text-card-foreground tracking-tight flex items-center gap-3 font-heading">
+                {maximizedPanel === "map" && <><MapPin className="h-6 w-6 text-primary" /> Incident Map</>}
+                {maximizedPanel === "incidents" && <><Activity className="h-6 w-6 text-destructive" /> Live Incident Feed</>}
+                {maximizedPanel === "contacts" && <><Users className="h-6 w-6 text-primary" /> Contact Directory</>}
+                {maximizedPanel === "robocaller" && <><Terminal className="h-6 w-6 text-green-500" /> Robocaller Console</>}
+                {maximizedPanel === "cameras" && <><Camera className="h-6 w-6 text-muted-foreground" /> Camera Feeds</>}
+              </span>
+              <button
+                onClick={() => setMaximizedPanel(null)}
+                className="flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors px-3 py-2 rounded-md hover:bg-secondary font-sans"
+              >
+                <Minimize2 className="h-4 w-4" />
+                Minimize
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 p-3 overflow-hidden">
+              {maximizedPanel === "map" && <IncidentMap incidents={incidents} />}
+              {maximizedPanel === "incidents" && (
+                <div className="h-full flex flex-col">
+                  {activeIncidents.length > 0 && (
+                    <div className="shrink-0 flex justify-end mb-2">
+                      <button
+                        onClick={clearAllIncidents}
+                        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        Clear all
+                      </button>
+                    </div>
+                  )}
+                  <div className="flex-1 min-h-0">
+                    <LiveIncidentFeed incidents={activeIncidents} onAlert={initiateRobocalls} onAnalyze={analyzeRisk} />
                   </div>
-                )}
-                <div className="flex-1 min-h-0">
-                  <LiveIncidentFeed incidents={activeIncidents} onAlert={initiateRobocalls} onAnalyze={analyzeRisk} />
                 </div>
-              </div>
-            )}
-            {maximizedPanel === "contacts" && (
-              <ContactsTable
-                contacts={contacts}
-                onAdd={createContact}
-                onEdit={editContact}
-                onDelete={deleteContact}
-                onToggle={toggleContact}
-              />
-            )}
-            {maximizedPanel === "robocaller" && <RobocallerConsole robocalls={robocalls} incidents={incidents} />}
-            {maximizedPanel === "cameras" && (
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 h-full">
-                {displayFeeds.map((feed) => (
-                  <CameraFeedCard
-                    key={feed.id}
-                    feed={feed}
-                    onVideoUploaded={() => queryClient.invalidateQueries({ queryKey: ["/api/modules/camera-processing/feeds"] })}
-                    onIncidentCreated={() => queryClient.invalidateQueries({ queryKey: ["/api/incidents"] })}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+              )}
+              {maximizedPanel === "contacts" && (
+                <ContactsTable
+                  contacts={contacts}
+                  onAdd={createContact}
+                  onEdit={editContact}
+                  onDelete={deleteContact}
+                  onToggle={toggleContact}
+                />
+              )}
+              {maximizedPanel === "robocaller" && <RobocallerConsole robocalls={robocalls} incidents={incidents} />}
+              {maximizedPanel === "cameras" && (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 h-full">
+                  {displayFeeds.map((feed) => (
+                    <CameraFeedCard
+                      key={feed.id}
+                      feed={feed}
+                      onVideoUploaded={() => queryClient.invalidateQueries({ queryKey: ["/api/modules/camera-processing/feeds"] })}
+                      onIncidentCreated={() => queryClient.invalidateQueries({ queryKey: ["/api/incidents"] })}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Header Bar */}
       <header className="shrink-0 flex items-center justify-between px-6 py-3 bg-white border-b border-border shadow-xs z-10">
@@ -1538,8 +1548,8 @@ export default function Dashboard() {
             <Shield className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-sm font-bold tracking-tight text-primary uppercase font-heading" data-testid="dashboard-title">INCIDENT RESPONSE CENTER</h1>
-            <p className="text-[10px] font-medium lowercase tracking-wide text-muted-foreground">Real-time monitoring & coordination</p>
+            <h1 className="text-2xl lg:text-3xl font-black tracking-tighter text-primary font-heading uppercase" data-testid="dashboard-title">INCIDENT RESPONSE CENTER</h1>
+            <p className="text-xs font-light tracking-widest text-muted-foreground font-sans uppercase">Real-time monitoring & coordination</p>
           </div>
         </div>
 
@@ -1562,11 +1572,11 @@ export default function Dashboard() {
           {/* Stats badges */}
           <div className="flex items-center gap-2">
             {criticalCount > 0 && (
-              <Badge className="bg-destructive text-destructive-foreground text-[10px] px-2 py-0.5 animate-pulse-status rounded-md shadow-sm font-bold tracking-wider border-none" data-testid="critical-badge">
+              <Badge className="bg-destructive text-destructive-foreground text-xs px-3 py-1 animate-pulse-status rounded-full shadow-sm font-black tracking-widest border-none font-sans uppercase" data-testid="critical-badge">
                 {criticalCount} CRITICAL
               </Badge>
             )}
-            <Badge variant="outline" className="text-[10px] px-2 py-0.5 border-border bg-secondary text-muted-foreground font-bold tracking-wider rounded-md" data-testid="active-count-badge">
+            <Badge variant="outline" className="text-xs px-3 py-1 border-border bg-secondary text-muted-foreground font-bold tracking-widest rounded-full font-sans uppercase" data-testid="active-count-badge">
               {activeIncidents.length} Active
             </Badge>
           </div>
@@ -1608,95 +1618,103 @@ export default function Dashboard() {
 
         {/* Row 2: Map + Incident Feed */}
         <section className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-4 lg:gap-6 min-h-0 staggered-fade-in delay-200">
-          <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
-            <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-white/50">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2 font-heading">
-                  <MapPin className="h-3.5 w-3.5 text-primary" />
-                  Incident Map
-                </CardTitle>
-                <MaxBtn panel="map" />
-              </div>
-            </CardHeader>
-            <CardContent className="p-0 h-[calc(100%-48px)] flex-1">
-              <IncidentMap incidents={incidents} />
-            </CardContent>
-          </Card>
-
-          <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
-            <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-white/50">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2 font-heading">
-                  <Activity className="h-3.5 w-3.5 text-destructive" />
-                  Live Incident Feed
-                  {activeIncidents.length > 0 && (
-                    <span className="h-2 w-2 rounded-full bg-destructive animate-pulse-status" />
-                  )}
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  {activeIncidents.length > 0 && (
-                    <button
-                      onClick={clearAllIncidents}
-                      className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-destructive transition-colors px-2 py-1 rounded-md hover:bg-secondary/50"
-                      data-testid="clear-incidents-btn"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      Clear all
-                    </button>
-                  )}
-                  <MaxBtn panel="incidents" />
+          <motion.div layoutId="map" className="h-full">
+            <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
+              <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-white/50">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-xl lg:text-2xl font-black text-card-foreground tracking-tight flex items-center gap-3 font-heading">
+                    <MapPin className="h-5 w-5 text-primary" />
+                    Incident Map
+                  </CardTitle>
+                  <MaxBtn panel="map" />
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-3 flex-1 min-h-0 bg-secondary/20">
-              <LiveIncidentFeed
-                incidents={activeIncidents}
-                onAlert={initiateRobocalls}
-                onAnalyze={analyzeRisk}
-              />
-            </CardContent>
-          </Card>
+              </CardHeader>
+              <CardContent className="p-0 h-[calc(100%-48px)] flex-1">
+                <IncidentMap incidents={incidents} />
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          <motion.div layoutId="incidents" className="h-full">
+            <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
+              <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-white/50">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-xl lg:text-2xl font-black text-card-foreground tracking-tight flex items-center gap-3 font-heading">
+                    <Activity className="h-5 w-5 text-destructive" />
+                    Live Incident Feed
+                    {activeIncidents.length > 0 && (
+                      <span className="h-2.5 w-2.5 rounded-full bg-destructive animate-pulse-status" />
+                    )}
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    {activeIncidents.length > 0 && (
+                      <button
+                        onClick={clearAllIncidents}
+                        className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-destructive transition-colors px-2 py-1 rounded-md hover:bg-secondary/50"
+                        data-testid="clear-incidents-btn"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        Clear all
+                      </button>
+                    )}
+                    <MaxBtn panel="incidents" />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-3 flex-1 min-h-0 bg-secondary/20">
+                <LiveIncidentFeed
+                  incidents={activeIncidents}
+                  onAlert={initiateRobocalls}
+                  onAnalyze={analyzeRisk}
+                />
+              </CardContent>
+            </Card>
+          </motion.div>
         </section>
 
         {/* Row 3: Contacts + Robocaller Console */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 min-h-0 staggered-fade-in delay-300">
-          <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
-            <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-white/50">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2 font-heading">
-                  <Users className="h-3.5 w-3.5 text-primary" />
-                  Contact Directory
-                </CardTitle>
-                <MaxBtn panel="contacts" />
-              </div>
-            </CardHeader>
-            <CardContent className="p-0 flex-1 min-h-0">
-              <ContactsTable
-                contacts={contacts}
-                onAdd={createContact}
-                onEdit={editContact}
-                onDelete={deleteContact}
-                onToggle={toggleContact}
-              />
-            </CardContent>
-          </Card>
+          <motion.div layoutId="contacts" className="h-full">
+            <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
+              <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-white/50">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-xl lg:text-2xl font-black text-card-foreground tracking-tight flex items-center gap-3 font-heading">
+                    <Users className="h-5 w-5 text-primary" />
+                    Contact Directory
+                  </CardTitle>
+                  <MaxBtn panel="contacts" />
+                </div>
+              </CardHeader>
+              <CardContent className="p-0 flex-1 min-h-0">
+                <ContactsTable
+                  contacts={contacts}
+                  onAdd={createContact}
+                  onEdit={editContact}
+                  onDelete={deleteContact}
+                  onToggle={toggleContact}
+                />
+              </CardContent>
+            </Card>
+          </motion.div>
 
-          <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
-            <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-white/50">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2 font-heading">
-                  <Terminal className="h-3.5 w-3.5 text-green-500" />
-                  Robocaller Console
-                </CardTitle>
-                <MaxBtn panel="robocaller" />
-              </div>
-            </CardHeader>
-            <CardContent className="p-4 flex-1 min-h-0 bg-secondary/10">
-              <RobocallerConsole robocalls={robocalls} incidents={incidents} />
-            </CardContent>
-          </Card>
+          <motion.div layoutId="robocaller" className="h-full">
+            <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
+              <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-white/50">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-xl lg:text-2xl font-black text-card-foreground tracking-tight flex items-center gap-3 font-heading">
+                    <Terminal className="h-5 w-5 text-green-500" />
+                    Robocaller Console
+                  </CardTitle>
+                  <MaxBtn panel="robocaller" />
+                </div>
+              </CardHeader>
+              <CardContent className="p-4 flex-1 min-h-0 bg-secondary/10">
+                <RobocallerConsole robocalls={robocalls} incidents={incidents} />
+              </CardContent>
+            </Card>
+          </motion.div>
         </section>
       </main>
-    </div>
+    </div >
   );
 }

@@ -229,4 +229,125 @@
   .animate-scan {
     animation: scan-line 3s linear infinite;
   }
+
+  /* ─── Motion tokens ──────────────────────────────────────────────────────── */
+  :root {
+    --dur-fast:   120ms;
+    --dur-base:   180ms;
+    --dur-slow:   280ms;
+    --dur-modal:  220ms;
+    --ease-out:   cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in:    cubic-bezier(0.4, 0, 1, 1);
+    --ease-inout: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Respect prefers-reduced-motion: collapse all durations to near-zero */
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --dur-fast:   1ms;
+      --dur-base:   1ms;
+      --dur-slow:   1ms;
+      --dur-modal:  1ms;
+    }
+  }
+
+  /* ─── Overlay enter/exit ─────────────────────────────────────────────────── */
+  /* Fullscreen overlays (maximize panel, contacts, etc.) */
+  .overlay-enter {
+    animation: overlay-in var(--dur-modal) var(--ease-out) both;
+  }
+  .overlay-exit {
+    animation: overlay-out var(--dur-fast) var(--ease-in) both;
+  }
+
+  @keyframes overlay-in {
+    from { opacity: 0; transform: scale(0.98); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  @keyframes overlay-out {
+    from { opacity: 1; transform: scale(1); }
+    to   { opacity: 0; transform: scale(0.98); }
+  }
+
+  /* ─── Map view transitions ───────────────────────────────────────────────── */
+  .map-view-enter {
+    animation: map-fade-in var(--dur-slow) var(--ease-out) both;
+  }
+  .map-view-exit {
+    animation: map-fade-out var(--dur-base) var(--ease-in) both;
+  }
+
+  @keyframes map-fade-in {
+    from { opacity: 0; transform: translateY(6px) scale(0.99); }
+    to   { opacity: 1; transform: translateY(0)  scale(1); }
+  }
+  @keyframes map-fade-out {
+    from { opacity: 1; transform: translateY(0)  scale(1); }
+    to   { opacity: 0; transform: translateY(-4px) scale(0.99); }
+  }
+
+  /* ─── Incident card entrance ─────────────────────────────────────────────── */
+  @keyframes card-in {
+    from { opacity: 0; transform: translateX(-6px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  .incident-card-enter {
+    animation: card-in var(--dur-base) var(--ease-out) both;
+  }
+
+  /* ─── Button active press ────────────────────────────────────────────────── */
+  .btn-press {
+    transition:
+      background-color var(--dur-fast) var(--ease-inout),
+      color            var(--dur-fast) var(--ease-inout),
+      border-color     var(--dur-fast) var(--ease-inout),
+      box-shadow       var(--dur-fast) var(--ease-inout),
+      opacity          var(--dur-fast) var(--ease-inout);
+  }
+  .btn-press:active:not(:disabled) {
+    transform: scale(0.97);
+    transition-duration: 60ms;
+  }
+
+  /* ─── Focus ring (accessible, not distracting) ───────────────────────────── */
+  .focus-ring:focus-visible {
+    outline: 2px solid rgba(148, 163, 184, 0.5); /* slate-400/50 */
+    outline-offset: 2px;
+  }
+
+  /* ─── Card hover lift ────────────────────────────────────────────────────── */
+  .card-hover {
+    transition:
+      border-color var(--dur-base) var(--ease-inout),
+      background   var(--dur-base) var(--ease-inout),
+      box-shadow   var(--dur-base) var(--ease-inout);
+  }
+  .card-hover:hover {
+    box-shadow: 0 0 0 1px rgba(100, 116, 139, 0.2); /* slate-500/20 */
+  }
+
+  /* ─── Voice waveform / audio activity indicator ──────────────────────────── */
+  @keyframes wave-bar {
+    0%, 100% { transform: scaleY(0.25); }
+    50%       { transform: scaleY(1); }
+  }
+
+  .waveform-bar {
+    display: inline-block;
+    width: 3px;
+    height: 14px;
+    border-radius: 2px;
+    background-color: currentColor;
+    transform-origin: bottom center;
+    animation: wave-bar 0.85s ease-in-out infinite;
+  }
+
+  /* ─── Flagged call card entrance ─────────────────────────────────────────── */
+  @keyframes flag-card-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .flag-card-enter {
+    animation: flag-card-in var(--dur-base) var(--ease-out) both;
+  }
 }

@@ -53,6 +53,8 @@ import {
   HeartPulse,
   Leaf,
   CircleAlert,
+  Flag,
+  PhoneCall,
 } from "lucide-react";
 
 type Incident = {
@@ -457,6 +459,18 @@ function CameraFeedCard({
           </div>
         )}
 
+        {/* Voice memo waveform — shown when a robocall is actively in progress for this feed */}
+        {feed.status === "calling" && !hazardAlert && (
+          <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/75 backdrop-blur-sm px-2 py-1 rounded-md z-10">
+            <div className="flex items-end gap-0.5 text-orange-400" aria-hidden="true">
+              {[0, 0.12, 0.24, 0.12, 0].map((delay, i) => (
+                <span key={i} className="waveform-bar" style={{ animationDelay: `${delay}s` }} />
+              ))}
+            </div>
+            <span className="text-[9px] text-orange-400 font-medium tracking-wide">Voice Active</span>
+          </div>
+        )}
+
         {/* AI scanning indicator (bottom-right, shows when actively analyzing) */}
         {isAnalyzing && !hazardAlert && (
           <div className="absolute bottom-2 right-2 flex items-center gap-1 bg-black/60 px-1.5 py-0.5 rounded">
@@ -805,7 +819,7 @@ function StateDrillDown({
 
       {/* Back button */}
       <button onClick={onBack}
-        className="absolute top-2 left-2 flex items-center gap-1.5 bg-slate-800/90 hover:bg-slate-700 border border-slate-600 text-slate-200 text-[11px] font-medium px-2.5 py-1.5 rounded transition-colors z-10"
+        className="absolute top-2 left-2 flex items-center gap-1.5 bg-slate-800/90 hover:bg-slate-700 border border-slate-600 text-slate-200 text-[11px] font-medium px-2.5 py-1.5 rounded z-10 btn-press focus-ring"
       >
         ← Back to US
       </button>
@@ -843,6 +857,8 @@ function IncidentMap({ incidents }: { incidents: Incident[] }) {
   const [stateScores, setStateScores] = useState<Record<string, number>>({});
   const prevScoresRef = useRef<Record<string, number>>({});
   const [selectedState, setSelectedState] = useState<string | null>(null);
+  const [drillClosing, setDrillClosing] = useState(false);
+  const drillTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [hoveredState, setHoveredState] = useState<string | null>(null);
 
   useEffect(() => {
@@ -856,6 +872,23 @@ function IncidentMap({ incidents }: { incidents: Incident[] }) {
     return () => clearInterval(id);
   }, [incidents]);
 
+  useEffect(() => () => { if (drillTimerRef.current) clearTimeout(drillTimerRef.current); }, []);
+
+  const openDrill = useCallback((code: string) => {
+    if (drillTimerRef.current) clearTimeout(drillTimerRef.current);
+    setDrillClosing(false);
+    setSelectedState(code);
+    setHoveredState(null);
+  }, []);
+
+  const closeDrill = useCallback(() => {
+    setDrillClosing(true);
+    drillTimerRef.current = setTimeout(() => {
+      setSelectedState(null);
+      setDrillClosing(false);
+    }, 200); // matches --dur-base
+  }, []);
+
   const activeIncidents = incidents.filter((i) => i.status === "active");
 
   const statePins = selectedState
@@ -868,77 +901,92 @@ function IncidentMap({ incidents }: { incidents: Incident[] }) {
         .filter(Boolean) as Array<{ inc: Incident; coords: [number, number] }>
     : [];
 
-  // Show drill-down view
-  if (selectedState) {
-    return (
-      <StateDrillDown
-        stateCode={selectedState}
-        pins={statePins}
-        onBack={() => setSelectedState(null)}
-      />
-    );
-  }
-
-  // Overview choropleth
   return (
-    <div className="relative w-full h-full rounded-lg overflow-hidden" data-testid="incident-map"
-      style={{ background: "linear-gradient(160deg, #0f172a 0%, #1a2744 40%, #162032 100%)" }}
-    >
-      {/* Topographic texture overlay */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.06]" preserveAspectRatio="xMidYMid slice">
-        <defs>
-          <pattern id="topo-lines" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M0 20 Q10 10 20 20 Q30 30 40 20" fill="none" stroke="#7dd3fc" strokeWidth="0.8"/>
-            <path d="M0 10 Q10 0 20 10 Q30 20 40 10" fill="none" stroke="#7dd3fc" strokeWidth="0.5"/>
-            <path d="M0 30 Q10 20 20 30 Q30 40 40 30" fill="none" stroke="#7dd3fc" strokeWidth="0.5"/>
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#topo-lines)"/>
-      </svg>
+    <div className="relative w-full h-full rounded-lg overflow-hidden" data-testid="incident-map">
 
-      <ComposableMap
-        projection="geoAlbersUsa"
-        projectionConfig={{ scale: 1000 }}
-        style={{ width: "100%", height: "100%", background: "transparent" }}
+      {/* Overview choropleth — always mounted, fades out when drill is open */}
+      <div
+        className="absolute inset-0 map-view"
+        style={{
+          transition: "opacity var(--dur-base) var(--ease-inout), transform var(--dur-base) var(--ease-inout)",
+          opacity:    selectedState && !drillClosing ? 0 : 1,
+          transform:  selectedState && !drillClosing ? "scale(0.99)" : "scale(1)",
+          pointerEvents: selectedState && !drillClosing ? "none" : "auto",
+        }}
       >
-        <Geographies geography={GEO_URL}>
-          {({ geographies }: { geographies: any[] }) =>
-            geographies.map((geo: any) => {
-              const rawId: string = String(geo.id ?? "").padStart(2, "0");
-              const stateCode: string = FIPS_TO_POSTAL[rawId] ?? geo.properties?.postal ?? rawId;
-              const score = stateScores[stateCode] ?? 0;
-              const isHovered = hoveredState === stateCode;
-              const fill = score > 0 ? scoreToColor(score) : isHovered ? "#334155" : "#1e293b";
-
-              return (
-                <Geography
-                  key={geo.rsmKey}
-                  geography={geo}
-                  fill={fill}
-                  stroke="#475569"
-                  strokeWidth={0.6}
-                  style={{
-                    default: { outline: "none", opacity: isHovered ? 0.8 : 1 },
-                    hover:   { outline: "none", opacity: 0.8, cursor: "pointer" },
-                    pressed: { outline: "none" },
-                  }}
-                  onClick={() => { setSelectedState(stateCode); setHoveredState(null); }}
-                  onMouseEnter={() => setHoveredState(stateCode)}
-                  onMouseLeave={() => setHoveredState(null)}
-                />
-              );
-            })
-          }
-        </Geographies>
-      </ComposableMap>
-
-      {/* Choropleth legend */}
-      <div className="absolute bottom-2 left-2 flex items-center gap-2 bg-black/60 rounded px-2 py-1">
-        <span className="text-[9px] text-slate-500">Low</span>
-        <div className="w-20 h-2 rounded" style={{ background: "linear-gradient(to right, #FDE047, #EF4444, #991B1B)" }} />
-        <span className="text-[9px] text-slate-500">High</span>
-        <span className="text-[9px] text-slate-600 ml-2">{activeIncidents.length} active</span>
+        <div className="relative w-full h-full rounded-lg overflow-hidden"
+          style={{ background: "linear-gradient(160deg, #0f172a 0%, #1a2744 40%, #162032 100%)" }}
+        >
+          <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.06]" preserveAspectRatio="xMidYMid slice">
+            <defs>
+              <pattern id="topo-lines" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+                <path d="M0 20 Q10 10 20 20 Q30 30 40 20" fill="none" stroke="#7dd3fc" strokeWidth="0.8"/>
+                <path d="M0 10 Q10 0 20 10 Q30 20 40 10" fill="none" stroke="#7dd3fc" strokeWidth="0.5"/>
+                <path d="M0 30 Q10 20 20 30 Q30 40 40 30" fill="none" stroke="#7dd3fc" strokeWidth="0.5"/>
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#topo-lines)"/>
+          </svg>
+          <ComposableMap
+            projection="geoAlbersUsa"
+            projectionConfig={{ scale: 1000 }}
+            style={{ width: "100%", height: "100%", background: "transparent" }}
+          >
+            <Geographies geography={GEO_URL}>
+              {({ geographies }: { geographies: any[] }) =>
+                geographies.map((geo: any) => {
+                  const rawId: string = String(geo.id ?? "").padStart(2, "0");
+                  const stateCode: string = FIPS_TO_POSTAL[rawId] ?? geo.properties?.postal ?? rawId;
+                  const score = stateScores[stateCode] ?? 0;
+                  const isHovered = hoveredState === stateCode;
+                  const fill = score > 0 ? scoreToColor(score) : isHovered ? "#334155" : "#1e293b";
+                  return (
+                    <Geography
+                      key={geo.rsmKey}
+                      geography={geo}
+                      fill={fill}
+                      stroke="#475569"
+                      strokeWidth={0.6}
+                      style={{
+                        default: { outline: "none", opacity: isHovered ? 0.8 : 1 },
+                        hover:   { outline: "none", opacity: 0.8, cursor: "pointer" },
+                        pressed: { outline: "none" },
+                      }}
+                      onClick={() => openDrill(stateCode)}
+                      onMouseEnter={() => setHoveredState(stateCode)}
+                      onMouseLeave={() => setHoveredState(null)}
+                    />
+                  );
+                })
+              }
+            </Geographies>
+          </ComposableMap>
+          <div className="absolute bottom-2 left-2 flex items-center gap-2 bg-black/60 rounded px-2 py-1">
+            <span className="text-[9px] text-slate-500">Low</span>
+            <div className="w-20 h-2 rounded" style={{ background: "linear-gradient(to right, #FDE047, #EF4444, #991B1B)" }} />
+            <span className="text-[9px] text-slate-500">High</span>
+            <span className="text-[9px] text-slate-600 ml-2">{activeIncidents.length} active</span>
+          </div>
+        </div>
       </div>
+
+      {/* Drill-down — mounts when state is selected, fades in/out */}
+      {selectedState && (
+        <div
+          className="absolute inset-0"
+          style={{
+            transition: "opacity var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out)",
+            opacity:   drillClosing ? 0 : 1,
+            transform: drillClosing ? "translateY(6px) scale(0.99)" : "translateY(0) scale(1)",
+          }}
+        >
+          <StateDrillDown
+            stateCode={selectedState}
+            pins={statePins}
+            onBack={closeDrill}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -1018,7 +1066,7 @@ function rankIncidentsByRisk(incidents: Incident[], assessments: RiskAssessment[
   return ranked;
 }
 
-function LiveIncidentFeed({ incidents }: { incidents: Incident[] }) {
+function LiveIncidentFeed({ incidents, onFlag }: { incidents: Incident[]; onFlag?: (id: number) => void }) {
   const rankBadgeClasses = (severity: string) => {
     if (severity === "critical") return "border-red-500/80 bg-red-500/20 text-red-200";
     if (severity === "high") return "border-orange-500/80 bg-orange-500/20 text-orange-200";
@@ -1037,92 +1085,160 @@ function LiveIncidentFeed({ incidents }: { incidents: Incident[] }) {
 
   return (
     <ScrollArea className="h-full" data-testid="incident-feed">
-      <div className="space-y-2 pr-3">
+      <div className="space-y-2.5 pr-3 py-1">
         {incidents.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-slate-500">
-            <CheckCircle2 className="h-8 w-8 mb-2 opacity-50" />
-            <p className="text-sm">No active incidents</p>
+          <div className="flex flex-col items-center justify-center py-14 text-slate-600">
+            <CheckCircle2 className="h-8 w-8 mb-3 opacity-40" />
+            <p className="text-xs font-medium text-slate-500">No active incidents</p>
+            <p className="text-[10px] text-slate-600 mt-0.5">All clear</p>
           </div>
         ) : (
-          <>
-            {/* Incident cards */}
-            {incidents.map((incident) => {
-              const meta = parseIncidentMeta(incident.description);
-              return (
-                <div
-                  key={incident.id}
-                  className={`p-3 bg-slate-900/60 rounded-lg border hover:border-slate-600/50 transition-colors ${cardBorderClasses(incident.riskRank ?? 999, incident.severity)}`}
-                  data-testid={`incident-card-${incident.id}`}
-                >
-                  <div className="flex items-start gap-2">
-                    {/* Rank block */}
-                    <div className={`shrink-0 min-w-[52px] rounded-md border px-1.5 py-1 text-center ${rankBadgeClasses(incident.severity)}`}>
-                      <p className="text-[9px] uppercase tracking-wide opacity-70">Rank</p>
-                      <p className="text-lg font-extrabold leading-none">#{incident.riskRank}</p>
+          incidents.map((incident) => {
+            const meta = parseIncidentMeta(incident.description);
+            return (
+              <div
+                key={incident.id}
+                className={`p-3.5 bg-slate-900/60 rounded-lg border card-hover ${cardBorderClasses(incident.riskRank ?? 999, incident.severity)}`}
+                data-testid={`incident-card-${incident.id}`}
+              >
+                <div className="flex items-start gap-3">
+                  {/* Rank block */}
+                  <div className={`shrink-0 min-w-[48px] rounded border px-1.5 py-1.5 text-center ${rankBadgeClasses(incident.severity)}`}>
+                    <p className="text-[8px] uppercase tracking-widest opacity-60 mb-0.5">Rank</p>
+                    <p className="text-base font-extrabold leading-none">#{incident.riskRank}</p>
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Badge className={`text-[10px] px-1.5 py-0 ${SEVERITY_COLORS[incident.severity]}`}>
+                        {incident.severity.toUpperCase()}
+                      </Badge>
+                      {incident.status === "active" && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse-status" />
+                      )}
                     </div>
+                    <h4 className="text-[13px] font-semibold text-slate-200 truncate leading-snug">{incident.title}</h4>
+                    <p className="text-[11px] text-slate-500 line-clamp-2 mt-1 leading-relaxed">{incident.description}</p>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Badge className={`text-[10px] px-1.5 py-0 ${SEVERITY_COLORS[incident.severity]}`}>
-                          {incident.severity.toUpperCase()}
-                        </Badge>
-                        {incident.status === "active" && (
-                          <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse-status" />
-                        )}
-                      </div>
-                      <h4 className="text-sm font-medium text-slate-200 truncate">{incident.title}</h4>
-                      <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">{incident.description}</p>
-
-                      {/* First-responder indicator badges */}
-                      <div className="flex flex-wrap items-center gap-1 mt-1.5">
-                        {meta.humanLife && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30">
-                            <User className="h-2 w-2" />
-                            Human life
-                          </span>
-                        )}
-                        {meta.noHumanLife && !meta.humanLife && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-slate-700/50 text-slate-500 border border-slate-700/30">
-                            <User className="h-2 w-2" />
-                            No humans
-                          </span>
-                        )}
-                        {meta.animals && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                            <PawPrint className="h-2 w-2" />
-                            Animals
-                          </span>
-                        )}
-                        {meta.objects && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-slate-700/50 text-slate-400 border border-slate-600/30">
-                            <Box className="h-2 w-2" />
-                            {meta.objects.length > 30 ? meta.objects.slice(0, 30) + "…" : meta.objects}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-3 mt-1.5">
-                        {incident.location && (
-                          <span className="text-[10px] text-slate-500 flex items-center gap-0.5">
-                            <MapPin className="h-2.5 w-2.5" />
-                            {incident.location}
-                          </span>
-                        )}
-                        <span className="text-[10px] text-slate-600 flex items-center gap-0.5">
-                          <Clock className="h-2.5 w-2.5" />
-                          {new Date(incident.createdAt).toLocaleTimeString()}
+                    {/* First-responder indicator badges */}
+                    <div className="flex flex-wrap items-center gap-1 mt-2">
+                      {meta.humanLife && (
+                        <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30">
+                          <User className="h-2 w-2" />
+                          Human life
                         </span>
-                      </div>
+                      )}
+                      {meta.noHumanLife && !meta.humanLife && (
+                        <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-slate-700/50 text-slate-500 border border-slate-700/30">
+                          <User className="h-2 w-2" />
+                          No humans
+                        </span>
+                      )}
+                      {meta.animals && (
+                        <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                          <PawPrint className="h-2 w-2" />
+                          Animals
+                        </span>
+                      )}
+                      {meta.objects && (
+                        <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-slate-700/50 text-slate-400 border border-slate-600/30">
+                          <Box className="h-2 w-2" />
+                          {meta.objects.length > 30 ? meta.objects.slice(0, 30) + "…" : meta.objects}
+                        </span>
+                      )}
                     </div>
 
+                    <div className="flex items-center gap-3 mt-2">
+                      {incident.location && (
+                        <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                          <MapPin className="h-2.5 w-2.5 shrink-0" />
+                          {incident.location}
+                        </span>
+                      )}
+                      <span className="text-[10px] text-slate-600 flex items-center gap-1">
+                        <Clock className="h-2.5 w-2.5 shrink-0" />
+                        {new Date(incident.createdAt).toLocaleTimeString()}
+                      </span>
+                      {onFlag && (
+                        <button
+                          onClick={() => onFlag(incident.id)}
+                          className="ml-auto flex items-center gap-1 text-[9px] text-slate-600 hover:text-amber-400 transition-colors btn-press focus-ring rounded px-1 py-0.5"
+                          aria-label={`Flag ${incident.title} for review`}
+                        >
+                          <Flag className="h-2.5 w-2.5" />
+                          Flag
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              );
-            })}
-          </>
+              </div>
+            );
+          })
         )}
       </div>
     </ScrollArea>
+  );
+}
+
+/** Flagged Calls review queue — operator can allow or discard each flagged incident. */
+function FlaggedCallsQueue({
+  incidents,
+  onAllow,
+  onDiscard,
+}: {
+  incidents: Incident[];
+  onAllow: (id: number) => void;
+  onDiscard: (id: number) => void;
+}) {
+  return (
+    <div className="space-y-2 py-0.5">
+      {incidents.map((incident) => (
+        <div
+          key={incident.id}
+          className="flag-card-enter p-3 bg-amber-950/25 rounded-lg border border-amber-700/35 card-hover"
+          data-testid={`flagged-call-${incident.id}`}
+        >
+          <div className="flex items-start gap-2.5">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Badge className={`text-[10px] px-1.5 py-0 ${SEVERITY_COLORS[incident.severity]}`}>
+                  {incident.severity.toUpperCase()}
+                </Badge>
+                <span className="text-[9px] text-amber-500 font-semibold uppercase tracking-widest">Under Review</span>
+              </div>
+              <h4 className="text-[12px] font-semibold text-slate-200 truncate leading-snug">{incident.title}</h4>
+              {incident.location && (
+                <span className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                  <MapPin className="h-2.5 w-2.5 shrink-0" />
+                  {incident.location}
+                </span>
+              )}
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex flex-col gap-1.5 shrink-0">
+              <button
+                onClick={() => onAllow(incident.id)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-medium bg-emerald-700/80 hover:bg-emerald-600 text-white transition-colors btn-press focus-ring"
+                aria-label={`Allow call for ${incident.title}`}
+              >
+                <PhoneCall className="h-3 w-3" />
+                Allow
+              </button>
+              <button
+                onClick={() => onDiscard(incident.id)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-medium bg-slate-800 hover:bg-red-950/60 text-slate-400 hover:text-red-400 border border-slate-700/60 hover:border-red-700/50 transition-colors btn-press focus-ring"
+                aria-label={`Discard flagged call: ${incident.title}`}
+              >
+                <Trash2 className="h-3 w-3" />
+                Discard
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -1323,12 +1439,66 @@ function ContactsTable({
 }
 
 
+/**
+ * Overlay with exit animation support.
+ * Returns { visible, closing, open, close }
+ * - visible:  mount the overlay in DOM
+ * - closing:  apply exit CSS class while visible is still true
+ * - open():   show immediately
+ * - close():  trigger exit animation, then unmount after EXIT_MS
+ */
+const EXIT_MS = 140; // matches --dur-fast
+function useAnimatedOverlay(initial = false) {
+  const [visible, setVisible] = useState(initial);
+  const [closing, setClosing] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const open = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setClosing(false);
+    setVisible(true);
+  }, []);
+
+  const close = useCallback(() => {
+    setClosing(true);
+    timerRef.current = setTimeout(() => {
+      setVisible(false);
+      setClosing(false);
+    }, EXIT_MS);
+  }, []);
+
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+
+  return { visible, closing, open, close };
+}
+
 export default function Dashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [maximizedPanel, setMaximizedPanel] = useState<string | null>(null);
-  const [contactsExpanded, setContactsExpanded] = useState(false);
+  const [maximizedClosing, setMaximizedClosing] = useState(false);
+  const maximizedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const contactsOverlay = useAnimatedOverlay(false);
   const [cameraPage, setCameraPage] = useState(0);
+  // Tracks which active incident IDs are in the "Flagged Calls" review queue
+  const [flaggedIds, setFlaggedIds] = useState<Set<number>>(new Set());
+
+  // Animated open/close for maximized panel
+  const openMaximized = useCallback((panel: string) => {
+    if (maximizedTimerRef.current) clearTimeout(maximizedTimerRef.current);
+    setMaximizedClosing(false);
+    setMaximizedPanel(panel);
+  }, []);
+
+  const closeMaximized = useCallback(() => {
+    setMaximizedClosing(true);
+    maximizedTimerRef.current = setTimeout(() => {
+      setMaximizedPanel(null);
+      setMaximizedClosing(false);
+    }, EXIT_MS);
+  }, []);
+
+  useEffect(() => () => { if (maximizedTimerRef.current) clearTimeout(maximizedTimerRef.current); }, []);
   const rankingSyncInFlightRef = useRef(false);
   const analyzingIncidentsRef = useRef(new Set<number>());
 
@@ -1486,6 +1656,36 @@ export default function Dashboard() {
     []
   );
 
+  // Move an incident into the flagged review queue
+  const flagIncident = useCallback((id: number) => {
+    setFlaggedIds((prev) => { const next = new Set(Array.from(prev)); next.add(id); return next; });
+  }, []);
+
+  // Release a flagged incident back into the live feed
+  const allowFlaggedCall = useCallback((id: number) => {
+    setFlaggedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
+  // Resolve a flagged incident via API and remove it from the queue
+  const discardFlaggedCall = useCallback(async (id: number) => {
+    try {
+      await apiRequest("PATCH", `/api/incidents/${id}`, { status: "resolved" });
+      setFlaggedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/incidents"] });
+      toast({ title: "Call Discarded", description: "Incident resolved and removed from queue." });
+    } catch {
+      toast({ title: "Error", description: "Failed to discard call.", variant: "destructive" });
+    }
+  }, [toast, queryClient]);
+
   // Resolve all active incidents at once
   const clearAllIncidents = useCallback(async () => {
     const active = incidents.filter((i) => i.status === "active");
@@ -1507,6 +1707,26 @@ export default function Dashboard() {
     () => rankIncidentsByRisk(incidents.filter((i) => i.status === "active"), riskAssessments),
     [incidents, riskAssessments],
   );
+
+  // Split active incidents: unflagged go to the live feed, flagged go to the review queue
+  const liveIncidents = useMemo(
+    () => activeIncidents.filter((i) => !flaggedIds.has(i.id)),
+    [activeIncidents, flaggedIds],
+  );
+  const flaggedIncidents = useMemo(
+    () => activeIncidents.filter((i) => flaggedIds.has(i.id)),
+    [activeIncidents, flaggedIds],
+  );
+
+  // Purge stale IDs from flaggedIds when incidents are externally resolved
+  useEffect(() => {
+    const activeIds = new Set(incidents.filter((i) => i.status === "active").map((i) => i.id));
+    setFlaggedIds((prev) => {
+      const next = new Set(Array.from(prev).filter((id) => activeIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [incidents]);
+
   const activeIncidentIdsKey = useMemo(
     () => incidents.filter((i) => i.status === "active").map((i) => i.id).sort((a, b) => a - b).join(","),
     [incidents],
@@ -1550,8 +1770,8 @@ export default function Dashboard() {
   // Helper: maximize button for card headers
   const MaxBtn = ({ panel }: { panel: string }) => (
     <button
-      onClick={() => setMaximizedPanel(panel)}
-      className="ml-1 p-0.5 rounded hover:bg-slate-700/50 transition-colors text-slate-600 hover:text-slate-400"
+      onClick={() => openMaximized(panel)}
+      className="ml-1 p-0.5 rounded btn-press focus-ring hover:bg-slate-700/50 transition-colors text-slate-600 hover:text-slate-400"
       title="Maximize"
     >
       <Maximize2 className="h-3 w-3" />
@@ -1562,17 +1782,16 @@ export default function Dashboard() {
     <div className="h-screen flex flex-col bg-slate-950 text-slate-200 overflow-hidden dark">
       {/* Maximized Panel Overlay */}
       {maximizedPanel && (
-        <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col">
-          <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-slate-800">
+        <div className={`fixed inset-0 z-50 bg-slate-950 flex flex-col ${maximizedClosing ? "overlay-exit" : "overlay-enter"}`}>
+          <div className="shrink-0 flex items-center justify-between px-4 py-3 bg-slate-900/80 border-b border-slate-800/80">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
               {maximizedPanel === "map" && <><MapPin className="h-3.5 w-3.5" /> Incident Map</>}
               {maximizedPanel === "incidents" && <><Activity className="h-3.5 w-3.5 text-red-400" /> Live Incident Feed</>}
-
               {maximizedPanel === "cameras" && <><Camera className="h-3.5 w-3.5" /> Camera Feeds</>}
             </span>
             <button
-              onClick={() => setMaximizedPanel(null)}
-              className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-200 transition-colors px-2 py-1 rounded hover:bg-slate-800"
+              onClick={closeMaximized}
+              className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-200 px-2.5 py-1.5 rounded hover:bg-slate-800 btn-press focus-ring"
             >
               <Minimize2 className="h-3.5 w-3.5" />
               Minimize
@@ -1581,9 +1800,9 @@ export default function Dashboard() {
           <div className="flex-1 min-h-0 p-3 overflow-hidden">
             {maximizedPanel === "map" && <IncidentMap incidents={incidents} />}
             {maximizedPanel === "incidents" && (
-              <div className="h-full flex flex-col">
-                {activeIncidents.length > 0 && (
-                  <div className="shrink-0 flex justify-end mb-2">
+              <div className="h-full flex flex-col gap-3">
+                {liveIncidents.length > 0 && (
+                  <div className="shrink-0 flex justify-end">
                     <button
                       onClick={clearAllIncidents}
                       className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-red-400 transition-colors"
@@ -1594,8 +1813,25 @@ export default function Dashboard() {
                   </div>
                 )}
                 <div className="flex-1 min-h-0">
-                  <LiveIncidentFeed incidents={activeIncidents} />
+                  <LiveIncidentFeed incidents={liveIncidents} onFlag={flagIncident} />
                 </div>
+                {flaggedIncidents.length > 0 && (
+                  <div className="shrink-0 border-t border-amber-900/30 pt-3">
+                    <div className="flex items-center gap-2 mb-2 px-1">
+                      <Flag className="h-3.5 w-3.5 text-amber-500" />
+                      <span className="text-[11px] font-semibold text-amber-500 uppercase tracking-wider">
+                        Flagged Calls ({flaggedIncidents.length})
+                      </span>
+                    </div>
+                    <div className="overflow-y-auto max-h-56">
+                      <FlaggedCallsQueue
+                        incidents={flaggedIncidents}
+                        onAllow={allowFlaggedCall}
+                        onDiscard={discardFlaggedCall}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1624,23 +1860,21 @@ export default function Dashboard() {
                       ) : (
                         <div
                           key={`empty-${i}`}
-                          className="rounded-lg border border-slate-800 bg-slate-900/60 flex flex-col items-center justify-center gap-1.5"
+                          className="rounded-lg border border-slate-800/70 bg-slate-900/40 flex flex-col items-center justify-center gap-2"
                         >
-                          <Camera className="h-6 w-6 text-slate-700" />
-                          <span className="text-[10px] text-slate-600 font-medium">
-                            Cam {cameraPage * PAGE_SIZE + i + 1}
-                          </span>
+                          <Camera className="h-5 w-5 text-slate-700" />
+                          <span className="text-[10px] text-slate-600 font-medium">Cam {cameraPage * PAGE_SIZE + i + 1}</span>
                           <span className="text-[9px] text-slate-700">No feed</span>
                         </div>
                       )
                     )}
                   </div>
                   {/* Pagination — always shown */}
-                  <div className="shrink-0 flex items-center justify-center gap-3 pt-2 pb-1">
+                  <div className="shrink-0 flex items-center justify-center gap-3 pt-2.5 pb-1">
                     <button
                       onClick={() => setCameraPage((p) => Math.max(0, p - 1))}
                       disabled={cameraPage === 0}
-                      className="px-3 py-1 text-[11px] rounded border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      className="px-3 py-1.5 text-[11px] rounded border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed btn-press focus-ring"
                     >
                       ← Prev
                     </button>
@@ -1650,7 +1884,7 @@ export default function Dashboard() {
                     <button
                       onClick={() => setCameraPage((p) => Math.min(totalPages - 1, p + 1))}
                       disabled={cameraPage === totalPages - 1}
-                      className="px-3 py-1 text-[11px] rounded border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      className="px-3 py-1.5 text-[11px] rounded border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed btn-press focus-ring"
                     >
                       Next →
                     </button>
@@ -1663,25 +1897,24 @@ export default function Dashboard() {
       )}
 
       {/* Header Bar */}
-      <header className="shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-slate-800">
-        <div className="flex items-center gap-3">
-          <Shield className="h-6 w-6 text-red-500" />
+      <header className="shrink-0 flex items-center justify-between px-5 py-3 bg-slate-900/80 border-b border-slate-800/80">
+        <div className="flex items-center gap-3.5">
+          <Shield className="h-5 w-5 text-red-500 shrink-0" />
           <div>
-            <h1 className="text-sm font-bold tracking-tight" data-testid="dashboard-title">INCIDENT RESPONSE CENTER</h1>
-            <p className="text-[10px] text-slate-500">Real-time monitoring & coordination</p>
+            <h1 className="text-sm font-bold tracking-tight text-slate-100" data-testid="dashboard-title">INCIDENT RESPONSE CENTER</h1>
+            <p className="text-[10px] text-slate-500 mt-0.5">Real-time monitoring & coordination</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-5">
           {/* Module health indicators */}
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-4">
             {[
-
               { key: "risk_analysis", label: "Risk" },
               { key: "camera_processing", label: "Camera" },
               { key: "contact_management", label: "Contacts" },
             ].map((mod) => (
-              <div key={mod.key} className="flex items-center gap-1" data-testid={`health-${mod.key}`}>
+              <div key={mod.key} className="flex items-center gap-1.5" data-testid={`health-${mod.key}`}>
                 {getHealthIcon(mod.key)}
                 <span className="text-[10px] text-slate-500">{mod.label}</span>
               </div>
@@ -1691,11 +1924,11 @@ export default function Dashboard() {
           {/* Stats badges */}
           <div className="flex items-center gap-2">
             {criticalCount > 0 && (
-              <Badge className="bg-red-600 text-white text-[10px] px-1.5 py-0 animate-pulse-status" data-testid="critical-badge">
+              <Badge className="bg-red-600 text-white text-[10px] px-2 py-0.5 animate-pulse-status" data-testid="critical-badge">
                 {criticalCount} CRITICAL
               </Badge>
             )}
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-slate-700 text-slate-400" data-testid="active-count-badge">
+            <Badge variant="outline" className="text-[10px] px-2 py-0.5 border-slate-700 text-slate-400" data-testid="active-count-badge">
               {activeIncidents.length} Active
             </Badge>
           </div>
@@ -1703,16 +1936,16 @@ export default function Dashboard() {
       </header>
 
       {/* Main Grid: camera row (auto) · map+feed row (1fr, fills all remaining space) */}
-      <main className="flex-1 grid grid-rows-[auto_1fr] gap-3 p-3 overflow-hidden min-h-0">
+      <main className="flex-1 grid grid-rows-[auto_1fr] gap-4 p-4 overflow-hidden min-h-0">
         {/* Row 1: Camera Feeds */}
         <section>
-          <div className="flex items-center gap-2 mb-2">
-            <Camera className="h-4 w-4 text-slate-500" />
-            <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Camera Feeds</h2>
+          <div className="flex items-center gap-2 mb-3">
+            <Camera className="h-3.5 w-3.5 text-slate-500" />
+            <h2 className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Camera Feeds</h2>
             <span className="text-[10px] text-slate-600">{cameraFeeds.filter((f) => f.isActive).length} active</span>
             <MaxBtn panel="cameras" />
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
             {displayFeeds.length === 0
               ? Array.from({ length: 4 }).map((_, i) => (
                   <Card key={i} className="bg-slate-900/80 border-slate-700/50 overflow-hidden">
@@ -1736,14 +1969,14 @@ export default function Dashboard() {
         </section>
 
         {/* Row 2: Left col = map stacked above contact directory · Right col = incident feed full height */}
-        <section className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-3 min-h-0">
+        <section className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 min-h-0">
 
           {/* Left: map (fills space) + contact directory (collapsed by default) */}
-          <div className="flex flex-col gap-3 min-h-0">
-            <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col flex-1 min-h-0">
-              <CardHeader className="py-2 px-3 shrink-0">
+          <div className="flex flex-col gap-4 min-h-0">
+            <Card className="bg-slate-900/50 border-slate-800/80 overflow-hidden flex flex-col flex-1 min-h-0">
+              <CardHeader className="py-2.5 px-4 shrink-0 border-b border-slate-800/60">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                  <CardTitle className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
                     <MapPin className="h-3.5 w-3.5" />
                     Incident Map
                   </CardTitle>
@@ -1756,17 +1989,17 @@ export default function Dashboard() {
             </Card>
 
             {/* Contact Directory — header only; expand opens full-screen overlay */}
-            <Card className="bg-slate-900/50 border-slate-800 overflow-hidden shrink-0">
-              <CardHeader className="py-2 px-3">
+            <Card className="bg-slate-900/50 border-slate-800/80 overflow-hidden shrink-0">
+              <CardHeader className="py-2.5 px-4">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                  <CardTitle className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
                     <Users className="h-3.5 w-3.5" />
                     Contact Directory
                     <span className="text-[10px] text-slate-600 font-normal normal-case tracking-normal">({contacts.length})</span>
                   </CardTitle>
                   <button
-                    onClick={() => setContactsExpanded(true)}
-                    className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors flex items-center gap-1"
+                    onClick={contactsOverlay.open}
+                    className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-1 btn-press focus-ring rounded px-1.5 py-1"
                   >
                     <Maximize2 className="h-3 w-3" />
                     View
@@ -1776,15 +2009,15 @@ export default function Dashboard() {
             </Card>
 
             {/* Contacts full-screen overlay */}
-            {contactsExpanded && (
-              <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col">
-                <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-slate-800">
+            {contactsOverlay.visible && (
+              <div className={`fixed inset-0 z-50 bg-slate-950 flex flex-col ${contactsOverlay.closing ? "overlay-exit" : "overlay-enter"}`}>
+                <div className="shrink-0 flex items-center justify-between px-4 py-3 bg-slate-900/80 border-b border-slate-800/80">
                   <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
                     <Users className="h-3.5 w-3.5" /> Contact Directory
                   </span>
                   <button
-                    onClick={() => setContactsExpanded(false)}
-                    className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-200 transition-colors px-2 py-1 rounded hover:bg-slate-800"
+                    onClick={contactsOverlay.close}
+                    className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-200 px-2.5 py-1.5 rounded hover:bg-slate-800 btn-press focus-ring"
                   >
                     <Minimize2 className="h-3.5 w-3.5" />
                     Close
@@ -1803,36 +2036,65 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Right: incident feed — full height of row */}
-          <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col min-h-0">
-            <CardHeader className="py-2 px-3 shrink-0">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <Activity className="h-3.5 w-3.5 text-red-400" />
-                  Live Incident Feed
-                  {activeIncidents.length > 0 && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse-status" />
-                  )}
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  {activeIncidents.length > 0 && (
-                    <button
-                      onClick={clearAllIncidents}
-                      className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-red-400 transition-colors"
-                      data-testid="clear-incidents-btn"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      Clear all
-                    </button>
-                  )}
-                  <MaxBtn panel="incidents" />
+          {/* Right: live incident feed + flagged calls queue */}
+          <div className="flex flex-col gap-3 min-h-0">
+            {/* Live Incident Feed — stretches to fill available height */}
+            <Card className="bg-slate-900/50 border-slate-800/80 overflow-hidden flex flex-col min-h-0 flex-1">
+              <CardHeader className="py-2.5 px-4 shrink-0 border-b border-slate-800/60">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                    <Activity className="h-3.5 w-3.5 text-red-400" />
+                    Live Incident Feed
+                    {liveIncidents.length > 0 && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse-status" />
+                    )}
+                  </CardTitle>
+                  <div className="flex items-center gap-2.5">
+                    {liveIncidents.length > 0 && (
+                      <button
+                        onClick={clearAllIncidents}
+                        className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-red-400 btn-press focus-ring rounded px-1.5 py-1"
+                        data-testid="clear-incidents-btn"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        Clear all
+                      </button>
+                    )}
+                    <MaxBtn panel="incidents" />
+                  </div>
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-2 flex-1 min-h-0">
-              <LiveIncidentFeed incidents={activeIncidents} />
-            </CardContent>
-          </Card>
+              </CardHeader>
+              <CardContent className="p-2 flex-1 min-h-0">
+                <LiveIncidentFeed incidents={liveIncidents} onFlag={flagIncident} />
+              </CardContent>
+            </Card>
+
+            {/* Flagged Calls — compact review queue, visible only when calls are flagged */}
+            {flaggedIncidents.length > 0 && (
+              <Card
+                className="bg-slate-900/50 border-amber-800/40 overflow-hidden flex-shrink-0"
+                data-testid="flagged-calls-section"
+              >
+                <CardHeader className="py-2.5 px-4 shrink-0 border-b border-amber-900/30">
+                  <CardTitle className="text-[11px] font-semibold text-amber-500/90 uppercase tracking-wider flex items-center gap-2">
+                    <Flag className="h-3.5 w-3.5" />
+                    Flagged Calls
+                    <span className="text-amber-600/70 font-normal normal-case tracking-normal">
+                      ({flaggedIncidents.length})
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                {/* max-h keeps this section compact; internal scroll if many flagged items */}
+                <div className="p-2 overflow-y-auto max-h-64">
+                  <FlaggedCallsQueue
+                    incidents={flaggedIncidents}
+                    onAllow={allowFlaggedCall}
+                    onDiscard={discardFlaggedCall}
+                  />
+                </div>
+              </Card>
+            )}
+          </div>
         </section>
       </main>
     </div>

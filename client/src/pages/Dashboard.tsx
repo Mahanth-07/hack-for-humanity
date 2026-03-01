@@ -537,7 +537,7 @@ function CameraFeedCard({
         )}
       </div>
 
-      <div className="p-4 bg-white flex flex-col flex-1">
+      <div className="p-4 bg-card flex flex-col flex-1">
         <div className="flex items-center justify-between">
           <div className="min-w-0">
             <h3 className="text-[13px] font-bold text-card-foreground truncate font-heading" data-testid={`camera-name-${feed.id}`}>{feed.name}</h3>
@@ -639,12 +639,12 @@ function IncidentMap({ incidents }: { incidents: Incident[] }) {
               <Geography
                 key={geo.rsmKey}
                 geography={geo}
-                fill="#E8E6E1"
-                stroke="#FFFFFF"
+                fill="#18181b"
+                stroke="#27272a"
                 strokeWidth={1}
                 style={{
                   default: { outline: "none" },
-                  hover: { outline: "none", fill: "#D4D2CD" },
+                  hover: { outline: "none", fill: "#27272a" },
                   pressed: { outline: "none" },
                 }}
               />
@@ -662,12 +662,12 @@ function IncidentMap({ incidents }: { incidents: Incident[] }) {
                 <animate attributeName="opacity" values="0.2;0.05;0.2" dur="2s" repeatCount="indefinite" />
               </circle>
               {/* Solid dot */}
-              <circle r={5} fill={color} stroke="white" strokeWidth={1.5} />
+              <circle r={5} fill={color} stroke="#18181b" strokeWidth={1.5} />
               {/* Label */}
               <text
                 textAnchor="middle"
                 y={-12}
-                style={{ fontSize: "9px", fontWeight: "900", fill: "#1A2B4A", pointerEvents: "none", filter: "drop-shadow(0px 1px 2px rgba(255,255,255,0.8))" }}
+                style={{ fontSize: "9px", fontWeight: "900", fill: "#f4f4f5", pointerEvents: "none", filter: "drop-shadow(0px 1px 2px rgba(0,0,0,0.8))" }}
               >
                 {incident.title.length > 18 ? incident.title.slice(0, 18) + "…" : incident.title}
               </text>
@@ -677,7 +677,7 @@ function IncidentMap({ incidents }: { incidents: Incident[] }) {
       </ComposableMap>
 
       {/* Legend */}
-      <div className="absolute bottom-3 left-3 flex items-center gap-3 bg-white/90 border border-border shadow-sm backdrop-blur-sm rounded-lg px-3 py-2">
+      <div className="absolute bottom-3 left-3 flex items-center gap-3 bg-card/90 border border-border shadow-sm backdrop-blur-sm rounded-lg px-3 py-2">
         {["critical", "high", "medium", "low"].map((sev) => (
           <div key={sev} className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full" style={{ backgroundColor: SEVERITY_PIN_COLORS[sev] }} />
@@ -785,9 +785,9 @@ function LiveIncidentFeed({
   };
 
   const cardBorderClasses = (rank: number, severity: string) => {
-    if (rank === 1) return "border-red-300 bg-white shadow-[0_4px_20px_-4px_rgba(239,68,68,0.15)] ring-1 ring-red-100";
-    if (rank === 2) return "border-orange-200 bg-white";
-    if (rank === 3) return "border-amber-200 bg-white";
+    if (rank === 1) return "border-red-500/50 bg-red-950/20 shadow-[0_4px_20px_-4px_rgba(239,68,68,0.15)] ring-1 ring-red-500/30";
+    if (rank === 2) return "border-orange-500/50 bg-orange-950/20";
+    if (rank === 3) return "border-amber-500/50 bg-amber-950/20";
     if (severity === "critical") return "border-red-200";
     if (severity === "high") return "border-orange-200";
     return "border-border/60";
@@ -809,7 +809,7 @@ function LiveIncidentFeed({
               return (
                 <div
                   key={incident.id}
-                  className={`p-4 bg-white rounded-xl shadow-xs border transition-all duration-200 hover:-translate-y-[1px] hover:shadow-md hover:border-border/80 ${cardBorderClasses(incident.riskRank ?? 999, incident.severity)}`}
+                  className={`p-4 bg-card rounded-xl shadow-xs border transition-all duration-200 hover:-translate-y-[1px] hover:shadow-md hover:border-border/80 ${cardBorderClasses(incident.riskRank ?? 999, incident.severity)}`}
                   data-testid={`incident-card-${incident.id}`}
                 >
                   <div className="flex items-start gap-4">
@@ -979,20 +979,20 @@ function ContactsTable({
               placeholder="Name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="h-9 text-xs bg-white border-border shadow-sm focus-visible:ring-primary"
+              className="h-9 text-xs bg-background border-border shadow-sm focus-visible:ring-primary"
               data-testid="contact-name-input"
             />
             <Input
               placeholder="Phone"
               value={form.phone}
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              className="h-9 text-xs bg-white border-border shadow-sm focus-visible:ring-primary"
+              className="h-9 text-xs bg-background border-border shadow-sm focus-visible:ring-primary"
               data-testid="contact-phone-input"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Select value={form.roleSelect} onValueChange={(v) => setForm({ ...form, roleSelect: v, roleCustom: "" })}>
-              <SelectTrigger className="h-9 text-xs bg-white border-border shadow-sm focus:ring-primary" data-testid="contact-role-select">
+              <SelectTrigger className="h-9 text-xs bg-background border-border shadow-sm focus:ring-primary" data-testid="contact-role-select">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1006,7 +1006,7 @@ function ContactsTable({
               placeholder="Email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className="h-9 text-xs bg-white border-border shadow-sm focus-visible:ring-primary"
+              className="h-9 text-xs bg-background border-border shadow-sm focus-visible:ring-primary"
               data-testid="contact-email-input"
             />
           </div>
@@ -1015,12 +1015,12 @@ function ContactsTable({
               placeholder="Enter custom role…"
               value={form.roleCustom}
               onChange={(e) => setForm({ ...form, roleCustom: e.target.value })}
-              className="h-9 text-xs bg-white border-border shadow-sm focus-visible:ring-primary"
+              className="h-9 text-xs bg-background border-border shadow-sm focus-visible:ring-primary"
               data-testid="contact-role-custom-input"
             />
           )}
           <Select value={form.location} onValueChange={(v) => setForm({ ...form, location: v })}>
-            <SelectTrigger className="h-9 text-xs bg-white border-border shadow-sm focus:ring-primary" data-testid="contact-location-select">
+            <SelectTrigger className="h-9 text-xs bg-background border-border shadow-sm focus:ring-primary" data-testid="contact-location-select">
               <SelectValue placeholder="Select location…" />
             </SelectTrigger>
             <SelectContent>
@@ -1047,7 +1047,7 @@ function ContactsTable({
             <div
               key={contact.id}
               className={`flex items-center gap-3 p-3 rounded-lg border transition-all duration-200 ${contact.isActive
-                ? "bg-white border-border hover:border-border/80 hover:shadow-sm"
+                ? "bg-card border-border hover:border-border/80 hover:shadow-sm"
                 : "bg-secondary/30 border-border/50 opacity-60 grayscale-[50%]"
                 }`}
               data-testid={`contact-row-${contact.id}`}
@@ -1478,7 +1478,7 @@ export default function Dashboard() {
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
             className="fixed inset-0 z-50 bg-background flex flex-col overflow-hidden"
           >
-            <div className="shrink-0 flex items-center justify-between px-6 py-5 bg-white border-b border-border shadow-xs">
+            <div className="shrink-0 flex items-center justify-between px-6 py-5 bg-card border-b border-border shadow-xs">
               <span className="text-2xl lg:text-3xl font-black text-card-foreground tracking-tight flex items-center gap-3 font-heading">
                 {maximizedPanel === "map" && <><MapPin className="h-6 w-6 text-primary" /> Incident Map</>}
                 {maximizedPanel === "incidents" && <><Activity className="h-6 w-6 text-destructive" /> Live Incident Feed</>}
@@ -1542,7 +1542,7 @@ export default function Dashboard() {
       </AnimatePresence>
 
       {/* Header Bar */}
-      <header className="shrink-0 flex items-center justify-between px-6 py-3 bg-white border-b border-border shadow-xs z-10">
+      <header className="shrink-0 flex items-center justify-between px-6 py-3 bg-card border-b border-border shadow-xs z-10">
         <div className="flex items-center gap-3">
           <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
             <Shield className="h-5 w-5 text-primary" />
@@ -1584,7 +1584,7 @@ export default function Dashboard() {
       </header>
 
       {/* Main Grid */}
-      <main className="flex-1 grid grid-rows-[auto_1fr_1fr] gap-4 p-4 lg:p-6 lg:gap-6 overflow-hidden min-h-0 bg-background">
+      <main className="flex-1 flex flex-col lg:grid lg:grid-rows-[auto_1fr_1fr] gap-4 p-4 lg:p-6 lg:gap-6 overflow-y-auto lg:overflow-hidden min-h-0 bg-background">
         {/* Row 1: Camera Feeds */}
         <section className="staggered-fade-in delay-100">
           <div className="flex items-center gap-2 mb-3">
@@ -1596,11 +1596,11 @@ export default function Dashboard() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
             {displayFeeds.length === 0
               ? Array.from({ length: 4 }).map((_, i) => (
-                <Card key={i} className="saas-card bg-white border border-border/50 overflow-hidden">
+                <Card key={i} className="saas-card bg-card border border-border/50 overflow-hidden">
                   <div className="aspect-video bg-secondary/30 flex items-center justify-center">
                     <Loader2 className="h-6 w-6 text-muted-foreground/30 animate-spin" />
                   </div>
-                  <div className="p-4 bg-white">
+                  <div className="p-4 bg-card">
                     <div className="h-3 w-20 bg-secondary rounded animate-pulse" />
                   </div>
                 </Card>
@@ -1618,9 +1618,9 @@ export default function Dashboard() {
 
         {/* Row 2: Map + Incident Feed */}
         <section className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-4 lg:gap-6 min-h-0 staggered-fade-in delay-200">
-          <motion.div layoutId="map" className="h-full">
+          <motion.div layoutId="map" className="h-[400px] lg:h-full shrink-0">
             <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
-              <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-white/50">
+              <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-muted/30">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-xl lg:text-2xl font-black text-card-foreground tracking-tight flex items-center gap-3 font-heading">
                     <MapPin className="h-5 w-5 text-primary" />
@@ -1635,9 +1635,9 @@ export default function Dashboard() {
             </Card>
           </motion.div>
 
-          <motion.div layoutId="incidents" className="h-full">
+          <motion.div layoutId="incidents" className="h-[500px] lg:h-full shrink-0">
             <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
-              <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-white/50">
+              <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-muted/30">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-xl lg:text-2xl font-black text-card-foreground tracking-tight flex items-center gap-3 font-heading">
                     <Activity className="h-5 w-5 text-destructive" />
@@ -1674,9 +1674,9 @@ export default function Dashboard() {
 
         {/* Row 3: Contacts + Robocaller Console */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 min-h-0 staggered-fade-in delay-300">
-          <motion.div layoutId="contacts" className="h-full">
+          <motion.div layoutId="contacts" className="h-[400px] lg:h-full shrink-0">
             <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
-              <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-white/50">
+              <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-muted/30">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-xl lg:text-2xl font-black text-card-foreground tracking-tight flex items-center gap-3 font-heading">
                     <Users className="h-5 w-5 text-primary" />
@@ -1697,9 +1697,9 @@ export default function Dashboard() {
             </Card>
           </motion.div>
 
-          <motion.div layoutId="robocaller" className="h-full">
+          <motion.div layoutId="robocaller" className="h-[400px] lg:h-full shrink-0">
             <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
-              <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-white/50">
+              <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-muted/30">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-xl lg:text-2xl font-black text-card-foreground tracking-tight flex items-center gap-3 font-heading">
                     <Terminal className="h-5 w-5 text-green-500" />

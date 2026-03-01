@@ -2,66 +2,59 @@
 @tailwind components;
 @tailwind utilities;
 
-/* LIGHT MODE SAAS DASHBOARD */
+/* CINEMATIC DARK MODE DASHBOARD */
 :root {
-  --button-outline: rgba(0, 0, 0, .10);
-  --badge-outline: rgba(0, 0, 0, .05);
+  --button-outline: rgba(255, 255, 255, .10);
+  --badge-outline: rgba(255, 255, 255, .05);
 
   --opaque-button-border-intensity: -8;
 
-  --elevate-1: rgba(0, 0, 0, .03);
-  --elevate-2: rgba(0, 0, 0, .08);
+  --elevate-1: rgba(255, 255, 255, .05);
+  --elevate-2: rgba(255, 255, 255, .10);
 
-  /* Solarpunk Layout and structural colors */
-  --background: 68 20% 94%;
-  /* Warm sunlit sage/beige #F4F5ED */
-  --foreground: 130 20% 14%;
-  /* Deep forest green body #1C2A1E */
-  --border: 68 20% 85%;
-  /* Earthy tone separator #DCE0D3 */
-  --card: 50 40% 97%;
-  /* Soft parchment white #FBFAF5 */
-  --card-foreground: 130 25% 10%;
-  /* Deep forest green headings */
-  --card-border: 68 20% 85%;
+  /* Deep cinematic structural colors */
+  --background: 240 10% 4%;
+  --foreground: 0 0% 98%;
+  --border: 240 10% 16%;
+  --card: 240 10% 8%;
+  --card-foreground: 0 0% 98%;
+  --card-border: 240 10% 16%;
 
   /* Sidebar colors */
-  --sidebar: 50 40% 97%;
-  --sidebar-foreground: 130 20% 14%;
-  --sidebar-border: 68 20% 85%;
-  --sidebar-primary: 123 46% 34%;
-  /* Hopeful green #2E7D32 */
+  --sidebar: 240 10% 6%;
+  --sidebar-foreground: 0 0% 98%;
+  --sidebar-border: 240 10% 16%;
+  --sidebar-primary: 142 76% 36%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 68 20% 90%;
-  --sidebar-accent-foreground: 130 25% 10%;
-  --sidebar-ring: 123 46% 34%;
+  --sidebar-accent: 240 10% 12%;
+  --sidebar-accent-foreground: 0 0% 98%;
+  --sidebar-ring: 142 76% 36%;
 
-  /* Core interactive colors */
-  --primary: 123 46% 34%;
-  /* Hopeful green #2E7D32 */
+  /* Core interactive colors (High contrast solarpunk greens) */
+  --primary: 142 76% 36%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 68 20% 90%;
-  /* Muted earthy accent */
-  --secondary-foreground: 130 20% 14%;
-  --muted: 68 20% 88%;
-  --muted-foreground: 130 11% 33%;
-  /* Lighter forest green #4A5D4E */
-  --accent: 68 20% 90%;
-  --accent-foreground: 130 20% 14%;
+  --secondary: 240 10% 12%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 240 10% 16%;
+  --muted-foreground: 240 5% 65%;
+  --accent: 240 10% 16%;
+  --accent-foreground: 0 0% 98%;
 
-  /* Status/Feedback colors - Refined */
-  --popover: 0 0% 100%;
-  --popover-foreground: 0 0% 24%;
-  --popover-border: 45 11% 90%;
+  /* Status/Feedback colors */
+  --popover: 240 10% 8%;
+  --popover-foreground: 0 0% 98%;
+  --popover-border: 240 10% 16%;
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
-  --input: 45 11% 85%;
-  --ring: 219 48% 20%;
-  --chart-1: 219 48% 40%;
-  --chart-2: 25 95% 53%;
+  --input: 240 10% 16%;
+  --ring: 142 76% 36%;
+
+  /* Chart Colors */
+  --chart-1: 142 76% 36%;
+  --chart-2: 199 89% 48%;
   --chart-3: 45 93% 47%;
-  --chart-4: 199 89% 48%;
-  --chart-5: 142 71% 45%;
+  --chart-4: 25 95% 53%;
+  --chart-5: 0 84% 60%;
 
   /* Solarpunk High-Contrast Typography */
   --font-sans: 'Space Grotesk', sans-serif;
@@ -70,15 +63,14 @@
 
   /* Shared structural */
   --radius: 0.75rem;
-  /* 12px for cards */
   --border-radius-card: 12px;
 
-  /* Refined Shadows */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.02);
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.05), 0 8px 24px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 12px 32px rgba(0, 0, 0, 0.08);
+  /* Refined Dynamic Shadows */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.7), 0 12px 32px rgba(0, 0, 0, 0.8);
 
   --tracking-normal: 0em;
   --spacing: 0.25rem;

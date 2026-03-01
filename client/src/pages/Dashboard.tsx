@@ -14,7 +14,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useUpload } from "@/hooks/use-upload";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
-  Phone,
   Camera,
   Users,
   Activity,
@@ -26,12 +25,11 @@ import {
   Upload,
   Video,
   MapPin,
-  Terminal,
+
   Trash2,
   Edit,
-  PhoneCall,
+
   Radio,
-  Zap,
   Clock,
   X,
   Save,
@@ -108,15 +106,6 @@ type CameraFeed = {
   createdAt: string;
 };
 
-type Robocall = {
-  id: number;
-  incidentId?: number;
-  contactId: number;
-  status: string;
-  message: string;
-  attempts: number;
-  createdAt: string;
-};
 
 const SEVERITY_COLORS: Record<string, string> = {
   critical: "bg-red-600 text-white",
@@ -760,15 +749,7 @@ function rankIncidentsByRisk(incidents: Incident[], assessments: RiskAssessment[
   return ranked;
 }
 
-function LiveIncidentFeed({
-  incidents,
-  onAlert,
-  onAnalyze,
-}: {
-  incidents: Incident[];
-  onAlert: (id: number) => void;
-  onAnalyze: (id: number) => void;
-}) {
+function LiveIncidentFeed({ incidents }: { incidents: Incident[] }) {
   const rankBadgeClasses = (severity: string) => {
     if (severity === "critical") return "border-red-500/80 bg-red-500/20 text-red-200";
     if (severity === "high") return "border-orange-500/80 bg-orange-500/20 text-orange-200";
@@ -865,27 +846,6 @@ function LiveIncidentFeed({
                       </div>
                     </div>
 
-                    <div className="flex flex-col gap-1 shrink-0">
-                      <Button
-                        size="sm"
-                        className="h-6 px-2 text-[10px] bg-blue-600 hover:bg-blue-700"
-                        onClick={() => onAlert(incident.id)}
-                        data-testid={`alert-btn-${incident.id}`}
-                      >
-                        <Phone className="h-2.5 w-2.5 mr-0.5" />
-                        Alert
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-6 px-2 text-[10px] border-slate-700 hover:bg-slate-800"
-                        onClick={() => onAnalyze(incident.id)}
-                        data-testid={`analyze-btn-${incident.id}`}
-                      >
-                        <Zap className="h-2.5 w-2.5 mr-0.5" />
-                        Analyze
-                      </Button>
-                    </div>
                   </div>
                 </div>
               );
@@ -1093,109 +1053,13 @@ function ContactsTable({
   );
 }
 
-function RobocallerConsole({ robocalls, incidents }: { robocalls: Robocall[]; incidents: Incident[] }) {
-  const consoleRef = useRef<HTMLDivElement>(null);
-  const [commandInput, setCommandInput] = useState("");
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  useEffect(() => {
-    if (consoleRef.current) {
-      consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
-    }
-  }, [robocalls]);
-
-  const handleCommand = async (cmd: string) => {
-    if (!cmd.trim()) return;
-    setCommandInput("");
-
-    const parts = cmd.trim().split(" ");
-    const action = parts[0]?.toLowerCase();
-
-    if (action === "alert" && parts[1]) {
-      try {
-        const incidentId = parseInt(parts[1]);
-        await apiRequest("POST", `/api/modules/robocaller/incident/${incidentId}`, {});
-        queryClient.invalidateQueries({ queryKey: ["/api/modules/robocaller"] });
-        toast({ title: "Robocalls Initiated", description: `Alert sent for incident #${incidentId}` });
-      } catch {
-        toast({ title: "Error", description: "Failed to initiate alert.", variant: "destructive" });
-      }
-    } else if (action === "status") {
-      toast({ title: "System Status", description: `${robocalls.length} calls logged. ${robocalls.filter((r) => r.status === "completed").length} completed.` });
-    } else if (action === "help") {
-      toast({
-        title: "Available Commands",
-        description: "alert <incident_id> | status | clear | help",
-      });
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "completed": return <CheckCircle2 className="h-3 w-3 text-green-500" />;
-      case "calling": return <PhoneCall className="h-3 w-3 text-blue-400 animate-pulse" />;
-      case "failed": return <XCircle className="h-3 w-3 text-red-500" />;
-      default: return <Clock className="h-3 w-3 text-yellow-500" />;
-    }
-  };
-
-  return (
-    <div className="h-full flex flex-col bg-slate-950 rounded-lg border border-slate-700/50 overflow-hidden" data-testid="robocaller-console">
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/80 border-b border-slate-700/50">
-        <Terminal className="h-3.5 w-3.5 text-green-400" />
-        <span className="text-[11px] font-mono text-green-400">robocaller@emergency</span>
-        <div className="flex-1" />
-        <span className="text-[10px] text-slate-600">{robocalls.length} calls</span>
-      </div>
-
-      <div ref={consoleRef} className="flex-1 overflow-y-auto p-2 font-mono text-[11px] space-y-1">
-        <div className="text-green-500/60">{'>'} Robocaller console ready. Type "help" for commands.</div>
-        <div className="text-slate-600">{'>'} Connected to emergency notification system.</div>
-
-        {robocalls.slice(-20).map((call) => (
-          <div key={call.id} className="flex items-start gap-1.5">
-            {getStatusIcon(call.status)}
-            <span className="text-slate-500">[{new Date(call.createdAt).toLocaleTimeString()}]</span>
-            <span className={
-              call.status === "completed" ? "text-green-400" :
-              call.status === "failed" ? "text-red-400" :
-              call.status === "calling" ? "text-blue-400" :
-              "text-yellow-400"
-            }>
-              {call.status.toUpperCase()}
-            </span>
-            <span className="text-slate-400 truncate">
-              Contact#{call.contactId} - {call.message.slice(0, 40)}{call.message.length > 40 ? "..." : ""}
-            </span>
-          </div>
-        ))}
-
-        {robocalls.length === 0 && (
-          <div className="text-slate-600">{'>'} No call activity yet. Use "alert {'<incident_id>'}" to start.</div>
-        )}
-      </div>
-
-      <div className="flex items-center border-t border-slate-700/50 bg-slate-900/50">
-        <span className="text-green-400 text-xs pl-2 font-mono">$</span>
-        <input
-          type="text"
-          value={commandInput}
-          onChange={(e) => setCommandInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") handleCommand(commandInput); }}
-          placeholder="Type command..."
-          className="flex-1 bg-transparent text-xs font-mono text-slate-300 px-2 py-2 focus:outline-none placeholder:text-slate-700"
-          data-testid="console-input"
-        />
-      </div>
-    </div>
-  );
-}
 
 export default function Dashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [maximizedPanel, setMaximizedPanel] = useState<string | null>(null);
+  const [contactsExpanded, setContactsExpanded] = useState(false);
+  const [cameraPage, setCameraPage] = useState(0);
   const rankingSyncInFlightRef = useRef(false);
   const analyzingIncidentsRef = useRef(new Set<number>());
 
@@ -1303,35 +1167,6 @@ export default function Dashboard() {
     seed();
   }, [cameraFeedsFetched]);
 
-  const { data: robocalls = [] } = useQuery<Robocall[]>({
-    queryKey: ["/api/modules/robocaller"],
-  });
-
-  const initiateRobocalls = useCallback(
-    async (incidentId: number) => {
-      try {
-        await apiRequest("POST", `/api/modules/robocaller/incident/${incidentId}`, {});
-        queryClient.invalidateQueries({ queryKey: ["/api/modules/robocaller"] });
-        toast({ title: "Alerts Sent", description: `Robocalls initiated for incident #${incidentId}` });
-      } catch {
-        toast({ title: "Error", description: "Failed to initiate alerts.", variant: "destructive" });
-      }
-    },
-    [toast]
-  );
-
-  const analyzeRisk = useCallback(
-    async (incidentId: number) => {
-      try {
-        await apiRequest("POST", `/api/modules/risk-analysis/analyze/${incidentId}`);
-        queryClient.invalidateQueries({ queryKey: ["/api/modules/risk-analysis"] });
-        toast({ title: "Analysis Queued", description: "AI risk assessment in progress." });
-      } catch {
-        toast({ title: "Error", description: "Failed to analyze risk.", variant: "destructive" });
-      }
-    },
-    [toast]
-  );
 
   const createContact = useCallback(
     async (data: Partial<Contact>) => {
@@ -1463,8 +1298,7 @@ export default function Dashboard() {
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
               {maximizedPanel === "map" && <><MapPin className="h-3.5 w-3.5" /> Incident Map</>}
               {maximizedPanel === "incidents" && <><Activity className="h-3.5 w-3.5 text-red-400" /> Live Incident Feed</>}
-              {maximizedPanel === "contacts" && <><Users className="h-3.5 w-3.5" /> Contact Directory</>}
-              {maximizedPanel === "robocaller" && <><Phone className="h-3.5 w-3.5 text-green-400" /> Robocaller Console</>}
+
               {maximizedPanel === "cameras" && <><Camera className="h-3.5 w-3.5" /> Camera Feeds</>}
             </span>
             <button
@@ -1491,32 +1325,70 @@ export default function Dashboard() {
                   </div>
                 )}
                 <div className="flex-1 min-h-0">
-                  <LiveIncidentFeed incidents={activeIncidents} onAlert={initiateRobocalls} onAnalyze={analyzeRisk} />
+                  <LiveIncidentFeed incidents={activeIncidents} />
                 </div>
               </div>
             )}
-            {maximizedPanel === "contacts" && (
-              <ContactsTable
-                contacts={contacts}
-                onAdd={createContact}
-                onEdit={editContact}
-                onDelete={deleteContact}
-                onToggle={toggleContact}
-              />
-            )}
-            {maximizedPanel === "robocaller" && <RobocallerConsole robocalls={robocalls} incidents={incidents} />}
-            {maximizedPanel === "cameras" && (
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 h-full">
-                {displayFeeds.map((feed) => (
-                  <CameraFeedCard
-                    key={feed.id}
-                    feed={feed}
-                    onVideoUploaded={() => queryClient.invalidateQueries({ queryKey: ["/api/modules/camera-processing/feeds"] })}
-                    onIncidentCreated={() => queryClient.invalidateQueries({ queryKey: ["/api/incidents"] })}
-                  />
-                ))}
-              </div>
-            )}
+
+            {maximizedPanel === "cameras" && (() => {
+              const PAGE_SIZE = 12;
+              // Total pages based on real feeds, but always at least 1 page of 12 slots
+              const totalPages = Math.max(1, Math.ceil(Math.max(cameraFeeds.length, 1) / PAGE_SIZE));
+              const pageFeeds = cameraFeeds.slice(cameraPage * PAGE_SIZE, (cameraPage + 1) * PAGE_SIZE);
+              // Pad to always show exactly 12 slots
+              const slots: Array<CameraFeed | null> = [
+                ...pageFeeds,
+                ...Array(Math.max(0, PAGE_SIZE - pageFeeds.length)).fill(null),
+              ];
+              return (
+                <div className="h-full flex flex-col">
+                  {/* 12-slot grid: 4 cols × 3 rows, each slot equal size */}
+                  <div className="flex-1 min-h-0 grid grid-cols-4 grid-rows-3 gap-2">
+                    {slots.map((feed, i) =>
+                      feed ? (
+                        <CameraFeedCard
+                          key={feed.id}
+                          feed={feed}
+                          onVideoUploaded={() => queryClient.invalidateQueries({ queryKey: ["/api/modules/camera-processing/feeds"] })}
+                          onIncidentCreated={() => queryClient.invalidateQueries({ queryKey: ["/api/incidents"] })}
+                        />
+                      ) : (
+                        <div
+                          key={`empty-${i}`}
+                          className="rounded-lg border border-slate-800 bg-slate-900/60 flex flex-col items-center justify-center gap-1.5"
+                        >
+                          <Camera className="h-6 w-6 text-slate-700" />
+                          <span className="text-[10px] text-slate-600 font-medium">
+                            Cam {cameraPage * PAGE_SIZE + i + 1}
+                          </span>
+                          <span className="text-[9px] text-slate-700">No feed</span>
+                        </div>
+                      )
+                    )}
+                  </div>
+                  {/* Pagination — always shown */}
+                  <div className="shrink-0 flex items-center justify-center gap-3 pt-2 pb-1">
+                    <button
+                      onClick={() => setCameraPage((p) => Math.max(0, p - 1))}
+                      disabled={cameraPage === 0}
+                      className="px-3 py-1 text-[11px] rounded border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      ← Prev
+                    </button>
+                    <span className="text-[11px] text-slate-500 tabular-nums">
+                      Page {cameraPage + 1} of {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setCameraPage((p) => Math.min(totalPages - 1, p + 1))}
+                      disabled={cameraPage === totalPages - 1}
+                      className="px-3 py-1 text-[11px] rounded border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Next →
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -1535,7 +1407,7 @@ export default function Dashboard() {
           {/* Module health indicators */}
           <div className="hidden md:flex items-center gap-3">
             {[
-              { key: "robocaller", label: "Robocaller" },
+
               { key: "risk_analysis", label: "Risk" },
               { key: "camera_processing", label: "Camera" },
               { key: "contact_management", label: "Contacts" },
@@ -1561,8 +1433,8 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Main Grid */}
-      <main className="flex-1 grid grid-rows-[auto_1fr_1fr] gap-3 p-3 overflow-hidden min-h-0">
+      {/* Main Grid: camera row (auto) · map+feed row (1fr, fills all remaining space) */}
+      <main className="flex-1 grid grid-rows-[auto_1fr] gap-3 p-3 overflow-hidden min-h-0">
         {/* Row 1: Camera Feeds */}
         <section>
           <div className="flex items-center gap-2 mb-2">
@@ -1594,24 +1466,76 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* Row 2: Map + Incident Feed */}
-        <section className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-3 min-h-0">
-          <Card className="bg-slate-900/50 border-slate-800 overflow-hidden">
-            <CardHeader className="py-2 px-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <MapPin className="h-3.5 w-3.5" />
-                  Incident Map
-                </CardTitle>
-                <MaxBtn panel="map" />
-              </div>
-            </CardHeader>
-            <CardContent className="p-2 h-[calc(100%-40px)]">
-              <IncidentMap incidents={incidents} />
-            </CardContent>
-          </Card>
+        {/* Row 2: Left col = map stacked above contact directory · Right col = incident feed full height */}
+        <section className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-3 min-h-0">
 
-          <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col">
+          {/* Left: map (fills space) + contact directory (collapsed by default) */}
+          <div className="flex flex-col gap-3 min-h-0">
+            <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col flex-1 min-h-0">
+              <CardHeader className="py-2 px-3 shrink-0">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                    <MapPin className="h-3.5 w-3.5" />
+                    Incident Map
+                  </CardTitle>
+                  <MaxBtn panel="map" />
+                </div>
+              </CardHeader>
+              <CardContent className="p-2 flex-1 min-h-0">
+                <IncidentMap incidents={incidents} />
+              </CardContent>
+            </Card>
+
+            {/* Contact Directory — header only; expand opens full-screen overlay */}
+            <Card className="bg-slate-900/50 border-slate-800 overflow-hidden shrink-0">
+              <CardHeader className="py-2 px-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                    <Users className="h-3.5 w-3.5" />
+                    Contact Directory
+                    <span className="text-[10px] text-slate-600 font-normal normal-case tracking-normal">({contacts.length})</span>
+                  </CardTitle>
+                  <button
+                    onClick={() => setContactsExpanded(true)}
+                    className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors flex items-center gap-1"
+                  >
+                    <Maximize2 className="h-3 w-3" />
+                    View
+                  </button>
+                </div>
+              </CardHeader>
+            </Card>
+
+            {/* Contacts full-screen overlay */}
+            {contactsExpanded && (
+              <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col">
+                <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-slate-800">
+                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                    <Users className="h-3.5 w-3.5" /> Contact Directory
+                  </span>
+                  <button
+                    onClick={() => setContactsExpanded(false)}
+                    className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-200 transition-colors px-2 py-1 rounded hover:bg-slate-800"
+                  >
+                    <Minimize2 className="h-3.5 w-3.5" />
+                    Close
+                  </button>
+                </div>
+                <div className="flex-1 min-h-0 p-3 overflow-auto">
+                  <ContactsTable
+                    contacts={contacts}
+                    onAdd={createContact}
+                    onEdit={editContact}
+                    onDelete={deleteContact}
+                    onToggle={toggleContact}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right: incident feed — full height of row */}
+          <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col min-h-0">
             <CardHeader className="py-2 px-3 shrink-0">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
@@ -1637,50 +1561,7 @@ export default function Dashboard() {
               </div>
             </CardHeader>
             <CardContent className="p-2 flex-1 min-h-0">
-              <LiveIncidentFeed
-                incidents={activeIncidents}
-                onAlert={initiateRobocalls}
-                onAnalyze={analyzeRisk}
-              />
-            </CardContent>
-          </Card>
-        </section>
-
-        {/* Row 3: Contacts + Robocaller Console */}
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-3 min-h-0">
-          <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col">
-            <CardHeader className="py-2 px-3 shrink-0">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <Users className="h-3.5 w-3.5" />
-                  Contact Directory
-                </CardTitle>
-                <MaxBtn panel="contacts" />
-              </div>
-            </CardHeader>
-            <CardContent className="p-2 flex-1 min-h-0">
-              <ContactsTable
-                contacts={contacts}
-                onAdd={createContact}
-                onEdit={editContact}
-                onDelete={deleteContact}
-                onToggle={toggleContact}
-              />
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col">
-            <CardHeader className="py-2 px-3 shrink-0">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <Phone className="h-3.5 w-3.5 text-green-400" />
-                  Robocaller Console
-                </CardTitle>
-                <MaxBtn panel="robocaller" />
-              </div>
-            </CardHeader>
-            <CardContent className="p-2 flex-1 min-h-0">
-              <RobocallerConsole robocalls={robocalls} incidents={incidents} />
+              <LiveIncidentFeed incidents={activeIncidents} />
             </CardContent>
           </Card>
         </section>

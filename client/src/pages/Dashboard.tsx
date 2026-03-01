@@ -495,8 +495,8 @@ function CameraFeedCard({
           )}
         </div>
 
-        {/* AI analysis status badge — only shown when not idle */}
-        {feed.status !== "idle" && (
+        {/* AI analysis status badge — only shown when not idle and hasVideo */}
+        {hasVideo && feed.status !== "idle" && (
           <div className="absolute top-2 left-[4.5rem]">
             <span className={`flex items-center gap-1 text-[10px] font-medium text-white/90 bg-black/60 px-1.5 py-0.5 rounded uppercase tracking-wider ${statusInfo.pulse ? "animate-pulse" : ""}`}>
               <span className={`h-1.5 w-1.5 rounded-full ${statusInfo.color}`} />
@@ -871,28 +871,6 @@ function LiveIncidentFeed({
                           {new Date(incident.createdAt).toLocaleTimeString()}
                         </span>
                       </div>
-                    </div>
-
-                    <div className="flex flex-col gap-1.5 shrink-0 pl-2">
-                      <Button
-                        size="sm"
-                        className="h-7 px-3 text-[11px] font-bold tracking-wide uppercase bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
-                        onClick={() => onAlert(incident.id)}
-                        data-testid={`alert-btn-${incident.id}`}
-                      >
-                        <Phone className="h-3 w-3 mr-1" />
-                        Alert
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 px-3 text-[11px] font-bold tracking-wide uppercase border-border/80 text-muted-foreground hover:bg-secondary hover:text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
-                        onClick={() => onAnalyze(incident.id)}
-                        data-testid={`analyze-btn-${incident.id}`}
-                      >
-                        <Zap className="h-3 w-3 mr-1" />
-                        Analyze
-                      </Button>
                     </div>
                   </div>
                 </div>
@@ -1525,8 +1503,8 @@ export default function Dashboard() {
               )}
               {maximizedPanel === "robocaller" && <RobocallerConsole robocalls={robocalls} incidents={incidents} />}
               {maximizedPanel === "cameras" && (
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 h-full">
-                  {displayFeeds.map((feed) => (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full overflow-y-auto w-full">
+                  {cameraFeeds.map((feed) => (
                     <CameraFeedCard
                       key={feed.id}
                       feed={feed}
@@ -1673,44 +1651,32 @@ export default function Dashboard() {
         </section>
 
         {/* Row 3: Contacts + Robocaller Console */}
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 min-h-[500px] staggered-fade-in delay-300">
-          <motion.div layoutId="contacts" className="min-h-[400px] h-full w-full">
-            <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
-              <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-muted/30">
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 staggered-fade-in delay-300">
+          <motion.div layoutId="contacts" className="w-full">
+            <Card className="saas-card flex flex-col bg-card overflow-hidden cursor-pointer hover:border-primary/50 transition-colors" onClick={() => setMaximizedPanel("contacts")}>
+              <CardHeader className="py-3 px-4 shrink-0 bg-muted/30">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-xl lg:text-2xl font-black text-card-foreground tracking-tight flex items-center gap-3 font-heading">
+                  <CardTitle className="text-lg lg:text-xl font-black text-card-foreground tracking-tight flex items-center gap-3 font-heading">
                     <Users className="h-5 w-5 text-primary" />
                     Contact Directory
                   </CardTitle>
                   <MaxBtn panel="contacts" />
                 </div>
               </CardHeader>
-              <CardContent className="p-0 flex-1 min-h-0">
-                <ContactsTable
-                  contacts={contacts}
-                  onAdd={createContact}
-                  onEdit={editContact}
-                  onDelete={deleteContact}
-                  onToggle={toggleContact}
-                />
-              </CardContent>
             </Card>
           </motion.div>
 
-          <motion.div layoutId="robocaller" className="min-h-[400px] h-full w-full">
-            <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
-              <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-muted/30">
+          <motion.div layoutId="robocaller" className="w-full">
+            <Card className="saas-card flex flex-col bg-card overflow-hidden cursor-pointer hover:border-primary/50 transition-colors" onClick={() => setMaximizedPanel("robocaller")}>
+              <CardHeader className="py-3 px-4 shrink-0 bg-muted/30">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-xl lg:text-2xl font-black text-card-foreground tracking-tight flex items-center gap-3 font-heading">
+                  <CardTitle className="text-lg lg:text-xl font-black text-card-foreground tracking-tight flex items-center gap-3 font-heading">
                     <Terminal className="h-5 w-5 text-green-500" />
                     Robocaller Console
                   </CardTitle>
                   <MaxBtn panel="robocaller" />
                 </div>
               </CardHeader>
-              <CardContent className="p-4 flex-1 min-h-0 bg-secondary/10">
-                <RobocallerConsole robocalls={robocalls} incidents={incidents} />
-              </CardContent>
             </Card>
           </motion.div>
         </section>

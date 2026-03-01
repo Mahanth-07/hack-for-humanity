@@ -1,8 +1,11 @@
 import { Router, Request, Response } from "express";
   import { db } from "../../db";
-  import { cameraFeeds, cameraDetections, incidents } from "@shared/schema";
-  import { eq, desc } from "drizzle-orm";
+  import { cameraFeeds, cameraDetections, incidents, riskAssessments } from "@shared/schema";
+  import { eq, desc, inArray } from "drizzle-orm";
   import { openai } from "../../replit_integrations/audio/client";
+  import { broadcast } from "../../index";
+  import { assessRisk, rankAssessments, Detection, ModelWindow, RiskFactor } from "../risk-analysis/engine";
+  import { defaultRiskConfig } from "../risk-analysis/config";
 
   const router = Router();
 
@@ -189,6 +192,8 @@ If no threat is detected, return detectionType "none" and urgency "none". Still 
           })
           .returning();
 
+        broadcast("detection_created", { detection });
+
         // Auto-create incident for medium-or-higher urgency detections
         if (aiDetection.urgency === "critical" || aiDetection.urgency === "high" || aiDetection.urgency === "medium") {
           const [camera] = await db
@@ -205,7 +210,44 @@ If no threat is detected, return detectionType "none" and urgency "none". Still 
               .where(eq(cameraFeeds.id, cameraFeedId));
 
             const label = aiDetection.detectionType.charAt(0).toUpperCase() + aiDetection.detectionType.slice(1);
+            const newSeverity: string = aiDetection.urgency === "critical" ? "critical" : aiDetection.urgency === "high" ? "high" : "medium";
 
+            // Check for an existing active incident from the same camera with the same detection type
+            // created in the last 10 minutes — if found, link detection to it instead of creating a duplicate
+            const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+            const existingTitlePrefix = `${label} Detected — ${camera.name}`;
+            const existingActiveIncidents = await db
+              .select()
+              .from(incidents)
+              .where(eq(incidents.status, "active"))
+              .orderBy(desc(incidents.createdAt));
+            const duplicate = existingActiveIncidents.find(
+              (inc) =>
+                inc.title === existingTitlePrefix &&
+                new Date(inc.createdAt) > tenMinutesAgo,
+            );
+
+            let incident: typeof incidents.$inferSelect;
+            if (duplicate) {
+              // Escalate severity if the new detection is higher
+              const severityRank: Record<string, number> = { low: 0, medium: 1, high: 2, critical: 3 };
+              if ((severityRank[newSeverity] ?? 0) > (severityRank[duplicate.severity] ?? 0)) {
+                const [updated] = await db
+                  .update(incidents)
+                  .set({ severity: newSeverity })
+                  .where(eq(incidents.id, duplicate.id))
+                  .returning();
+                incident = updated;
+              } else {
+                incident = duplicate;
+              }
+              await db
+                .update(cameraDetections)
+                .set({ incidentId: incident.id })
+                .where(eq(cameraDetections.id, detection.id));
+              broadcast("incident_created", { incident });
+              broadcast("camera_status_changed", { cameraFeedId: camera.id, status: "incident" });
+            } else {
             // Build enriched incident description for first responders
             const parts: string[] = [aiDetection.description || "Automated camera detection"];
             if (aiDetection.sceneContext) parts.push(aiDetection.sceneContext);
@@ -215,22 +257,91 @@ If no threat is detected, return detectionType "none" and urgency "none". Still 
             if (aiDetection.inanimateObjects) parts.push(`Objects visible: ${aiDetection.inanimateObjects}.`);
             const enrichedDescription = parts.join(" ");
 
-            const [incident] = await db
+            const [newIncident] = await db
               .insert(incidents)
               .values({
-                title: `${label} Detected — ${camera.name}`,
+                title: existingTitlePrefix,
                 description: enrichedDescription,
-                severity: aiDetection.urgency === "critical" ? "critical" : aiDetection.urgency === "high" ? "high" : "medium",
+                severity: newSeverity,
                 status: "active",
                 location: camera.location,
               })
               .returning();
+            incident = newIncident;
+
+            broadcast("incident_created", { incident });
+            broadcast("camera_status_changed", { cameraFeedId: camera.id, status: "incident" });
 
             // Link detection to incident
             await db
               .update(cameraDetections)
               .set({ incidentId: incident.id })
               .where(eq(cameraDetections.id, detection.id));
+            } // end else (new incident)
+
+            // Immediately score / re-score the incident and broadcast updated rankings
+            try {
+              const nowMs = Date.now();
+              const engineDetection: Detection = {
+                cameraId: String(cameraFeedId),
+                ts: detection.createdAt.getTime(),
+                label: String(detection.detectionType || "unknown").toLowerCase(),
+                confidence: Math.min(1, Math.max(0, Number(detection.confidence ?? 0) > 1 ? Number(detection.confidence) / 100 : Number(detection.confidence ?? 0))),
+                region: "other",
+              };
+              const window: ModelWindow = {
+                cameraId: String(cameraFeedId),
+                startTs: nowMs - defaultRiskConfig.windowMs,
+                endTs: nowMs,
+                detections: [engineDetection],
+              };
+              const result = assessRisk(window, { priorWindows: [] }, { ...defaultRiskConfig, referenceTsMs: nowMs });
+              const [stored] = await db
+                .insert(riskAssessments)
+                .values({
+                  incidentId: incident.id,
+                  riskScore: result.riskScore,
+                  severity: result.severity,
+                  threatLevel: result.threatLevel,
+                  priorityScore: Math.round(result.priorityScore),
+                  analysis: result.analysis,
+                  recommendations: result.recommendedActions,
+                  factors: result.factors,
+                })
+                .returning();
+
+              // Compute cross-incident rankings and broadcast
+              const activeIncidents = await db.select({ id: incidents.id }).from(incidents).where(eq(incidents.status, "active"));
+              const activeIds = activeIncidents.map((i) => i.id);
+              if (activeIds.length > 0) {
+                const allLatestRows = await db.select().from(riskAssessments).where(inArray(riskAssessments.incidentId, activeIds)).orderBy(desc(riskAssessments.createdAt));
+                const latestByIncident = new Map<number, typeof allLatestRows[number]>();
+                for (const row of allLatestRows) {
+                  if (!latestByIncident.has(row.incidentId)) latestByIncident.set(row.incidentId, row);
+                }
+                const ranked = rankAssessments(Array.from(latestByIncident.values()).map((row) => ({
+                  incidentId: row.incidentId,
+                  assessmentTsMs: row.createdAt.getTime(),
+                  riskScore: row.riskScore,
+                  severity: (row.severity as "low" | "medium" | "high" | "severe") ?? "low",
+                  threatLevel: (row.threatLevel as "low" | "moderate" | "high" | "severe") ?? "low",
+                  priorityScore: row.priorityScore ?? row.riskScore,
+                  factors: Array.isArray(row.factors) ? (row.factors as RiskFactor[]) : [],
+                  recommendedActions: Array.isArray(row.recommendations) ? (row.recommendations as string[]) : [],
+                  analysis: row.analysis ?? "",
+                })));
+                const rankInfo = ranked.find((r) => r.incidentId === incident.id);
+                broadcast("risk_ranking_updated", {
+                  updatedIncidentId: incident.id,
+                  updatedAssessmentId: stored.id,
+                  rank: rankInfo?.rank ?? null,
+                  rankWithinSeverity: rankInfo?.rankWithinSeverity ?? null,
+                  top: ranked.slice(0, 5),
+                });
+              }
+            } catch (riskErr) {
+              console.error("Auto risk scoring failed for new incident:", riskErr);
+            }
 
             return res.json({ detection, incident, autoCreated: true, cameraName: camera.name });
           }

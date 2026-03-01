@@ -14,6 +14,7 @@ import {
   ThreatLevel,
 } from "./engine";
 import { defaultRiskConfig } from "./config";
+import { broadcast } from "../../index";
 
 const router = Router();
 
@@ -295,6 +296,13 @@ function shouldIncludeRanks(req: Request): boolean {
   return value === "1" || value === "true";
 }
 
+function getCooldownSeconds(req: Request): number {
+  const raw = req.query.cooldownSeconds;
+  const value = Number(Array.isArray(raw) ? raw[0] : raw);
+  if (!Number.isFinite(value)) return 60 * 60;
+  return clamp(Math.floor(value), 0, 24 * 60 * 60);
+}
+
 async function computeLatestRankings(incidentIds: number[]) {
   if (incidentIds.length === 0) return [];
   const all = await db
@@ -458,17 +466,24 @@ router.post("/analyze/:incidentId", async (req: Request, res: Response) => {
 
     const normalized = normalizeStoredAssessment(stored);
 
-    if (!shouldIncludeRanks(req)) {
-      return res.json(normalized);
-    }
-
     const active = await db
       .select({ id: incidents.id })
       .from(incidents)
       .where(eq(incidents.status, "active"));
-
     const ranked = await computeLatestRankings(active.map((item) => item.id));
     const rankInfo = ranked.find((item) => item.incidentId === incidentId);
+
+    broadcast("risk_ranking_updated", {
+      updatedIncidentId: incidentId,
+      updatedAssessmentId: normalized.id,
+      rank: rankInfo?.rank ?? null,
+      rankWithinSeverity: rankInfo?.rankWithinSeverity ?? null,
+      top: ranked.slice(0, 5),
+    });
+
+    if (!shouldIncludeRanks(req)) {
+      return res.json(normalized);
+    }
 
     return res.json({
       ...normalized,
@@ -494,7 +509,8 @@ router.post("/analyze-all", async (_req: Request, res: Response) => {
     }
 
     const nowMs = Date.now();
-    const oneHourAgo = new Date(nowMs - 60 * 60 * 1000);
+    const cooldownSeconds = getCooldownSeconds(_req);
+    const cooldownCutoff = new Date(nowMs - cooldownSeconds * 1000);
     const historyCutoff = new Date(nowMs - Math.max(defaultRiskConfig.historyWindowMs, 60 * 60 * 1000));
     const incidentIds = activeIncidents.map((incident) => incident.id);
 
@@ -538,7 +554,7 @@ router.post("/analyze-all", async (_req: Request, res: Response) => {
       const assessmentHistory = assessmentsByIncident.get(incident.id) ?? [];
       const latest = assessmentHistory[0];
 
-      if (latest && latest.createdAt > oneHourAgo) {
+      if (latest && latest.createdAt > cooldownCutoff) {
         keepExisting.push(normalizeStoredAssessment(latest));
         continue;
       }
@@ -602,6 +618,13 @@ router.post("/analyze-all", async (_req: Request, res: Response) => {
     res.json({
       message: `Analyzed ${inserted.length} incidents`,
       assessments,
+    });
+
+    broadcast("risk_ranking_updated", {
+      analyzedCount: inserted.length,
+      incidentCount: assessments.length,
+      cooldownSeconds,
+      top: ranked.slice(0, 5),
     });
   } catch (error) {
     console.error("Error batch analyzing:", error);

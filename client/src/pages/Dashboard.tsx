@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 // @ts-ignore – no type declarations bundled with react-simple-maps
 import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
@@ -61,6 +61,19 @@ type Incident = {
   status: "active" | "resolved" | "escalated";
   location?: string;
   coordinates?: { lat: number; lng: number };
+  createdAt: string;
+  riskRank?: number;
+  riskScore?: number | null;
+  priorityScore?: number | null;
+};
+
+type RiskAssessment = {
+  id: number;
+  incidentId: number;
+  riskScore: number;
+  severity?: "low" | "medium" | "high" | "severe" | null;
+  threatLevel?: "low" | "moderate" | "high" | "severe" | null;
+  priorityScore?: number | null;
   createdAt: string;
 };
 
@@ -682,6 +695,71 @@ function parseIncidentMeta(description: string) {
   return { humanLife, noHumanLife, animals, objects };
 }
 
+const INCIDENT_SEVERITY_WEIGHT: Record<"low" | "medium" | "high" | "critical", number> = {
+  low: 1,
+  medium: 2,
+  high: 3,
+  critical: 4,
+};
+
+// Extract the camera name from an incident title, e.g. "Fire Detected — Camera 2" → "Camera 2"
+function extractCameraKey(incident: Incident): string {
+  const match = incident.title.match(/—\s*(.+)$/);
+  return match ? match[1].trim() : `incident-${incident.id}`;
+}
+
+function rankIncidentsByRisk(incidents: Incident[], assessments: RiskAssessment[]): Incident[] {
+  // Build latest assessment per incident
+  const latestByIncident = new Map<number, RiskAssessment>();
+  for (const item of assessments) {
+    const existing = latestByIncident.get(item.incidentId);
+    if (!existing || new Date(item.createdAt).getTime() > new Date(existing.createdAt).getTime()) {
+      latestByIncident.set(item.incidentId, item);
+    }
+  }
+
+  const enriched = incidents.map((incident) => {
+    const latest = latestByIncident.get(incident.id);
+    const riskScore = typeof latest?.riskScore === "number" ? latest.riskScore : null;
+    const priorityScore = typeof latest?.priorityScore === "number" ? latest.priorityScore : riskScore;
+    return {
+      incident,
+      riskScore,
+      priorityScore,
+      assessmentTs: latest ? new Date(latest.createdAt).getTime() : 0,
+      cameraKey: extractCameraKey(incident),
+    };
+  });
+
+  // Sort by severity first, then risk score, then recency
+  enriched.sort((a, b) => {
+    const sevA = INCIDENT_SEVERITY_WEIGHT[a.incident.severity] ?? 0;
+    const sevB = INCIDENT_SEVERITY_WEIGHT[b.incident.severity] ?? 0;
+    if (sevB !== sevA) return sevB - sevA;
+    if ((b.priorityScore ?? -1) !== (a.priorityScore ?? -1)) return (b.priorityScore ?? -1) - (a.priorityScore ?? -1);
+    if ((b.riskScore ?? -1) !== (a.riskScore ?? -1)) return (b.riskScore ?? -1) - (a.riskScore ?? -1);
+    if (b.assessmentTs !== a.assessmentTs) return b.assessmentTs - a.assessmentTs;
+    return new Date(b.incident.createdAt).getTime() - new Date(a.incident.createdAt).getTime();
+  });
+
+  // Deduplicate: each camera feed gets one rank slot — the worst incident for that camera
+  // (already sorted worst-first, so first occurrence wins)
+  const seenCameras = new Set<string>();
+  const ranked: Incident[] = [];
+  for (const item of enriched) {
+    if (!seenCameras.has(item.cameraKey)) {
+      seenCameras.add(item.cameraKey);
+      ranked.push({
+        ...item.incident,
+        riskRank: ranked.length + 1,
+        riskScore: item.riskScore,
+        priorityScore: item.priorityScore,
+      });
+    }
+  }
+  return ranked;
+}
+
 function LiveIncidentFeed({
   incidents,
   onAlert,
@@ -691,6 +769,22 @@ function LiveIncidentFeed({
   onAlert: (id: number) => void;
   onAnalyze: (id: number) => void;
 }) {
+  const rankBadgeClasses = (severity: string) => {
+    if (severity === "critical") return "border-red-500/80 bg-red-500/20 text-red-200";
+    if (severity === "high") return "border-orange-500/80 bg-orange-500/20 text-orange-200";
+    if (severity === "medium") return "border-amber-500/80 bg-amber-500/20 text-amber-200";
+    return "border-slate-600 bg-slate-700/50 text-slate-300";
+  };
+
+  const cardBorderClasses = (rank: number, severity: string) => {
+    if (rank === 1) return "border-red-500/70 bg-red-500/8 shadow-[0_0_0_1px_rgba(239,68,68,0.25)]";
+    if (rank === 2) return "border-orange-500/60 bg-orange-500/6";
+    if (rank === 3) return "border-amber-500/60 bg-amber-500/6";
+    if (severity === "critical") return "border-red-500/30";
+    if (severity === "high") return "border-orange-500/30";
+    return "border-slate-700/50";
+  };
+
   return (
     <ScrollArea className="h-full" data-testid="incident-feed">
       <div className="space-y-2 pr-3">
@@ -700,93 +794,103 @@ function LiveIncidentFeed({
             <p className="text-sm">No active incidents</p>
           </div>
         ) : (
-          incidents.map((incident) => {
-            const meta = parseIncidentMeta(incident.description);
-            return (
-              <div
-                key={incident.id}
-                className="p-3 bg-slate-900/60 rounded-lg border border-slate-700/50 hover:border-slate-600/50 transition-colors"
-                data-testid={`incident-card-${incident.id}`}
-              >
-                <div className="flex items-start gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <Badge className={`text-[10px] px-1.5 py-0 ${SEVERITY_COLORS[incident.severity]}`}>
-                        {incident.severity.toUpperCase()}
-                      </Badge>
-                      {incident.status === "active" && (
-                        <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse-status" />
-                      )}
-                    </div>
-                    <h4 className="text-sm font-medium text-slate-200 truncate">{incident.title}</h4>
-                    <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">{incident.description}</p>
-
-                    {/* First-responder indicator badges */}
-                    <div className="flex flex-wrap items-center gap-1 mt-1.5">
-                      {meta.humanLife && (
-                        <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30">
-                          <User className="h-2 w-2" />
-                          Human life
-                        </span>
-                      )}
-                      {meta.noHumanLife && !meta.humanLife && (
-                        <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-slate-700/50 text-slate-500 border border-slate-700/30">
-                          <User className="h-2 w-2" />
-                          No humans
-                        </span>
-                      )}
-                      {meta.animals && (
-                        <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                          <PawPrint className="h-2 w-2" />
-                          Animals
-                        </span>
-                      )}
-                      {meta.objects && (
-                        <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-slate-700/50 text-slate-400 border border-slate-600/30">
-                          <Box className="h-2 w-2" />
-                          {meta.objects.length > 30 ? meta.objects.slice(0, 30) + "…" : meta.objects}
-                        </span>
-                      )}
+          <>
+            {/* Incident cards */}
+            {incidents.map((incident) => {
+              const meta = parseIncidentMeta(incident.description);
+              return (
+                <div
+                  key={incident.id}
+                  className={`p-3 bg-slate-900/60 rounded-lg border hover:border-slate-600/50 transition-colors ${cardBorderClasses(incident.riskRank ?? 999, incident.severity)}`}
+                  data-testid={`incident-card-${incident.id}`}
+                >
+                  <div className="flex items-start gap-2">
+                    {/* Rank block */}
+                    <div className={`shrink-0 min-w-[52px] rounded-md border px-1.5 py-1 text-center ${rankBadgeClasses(incident.severity)}`}>
+                      <p className="text-[9px] uppercase tracking-wide opacity-70">Rank</p>
+                      <p className="text-lg font-extrabold leading-none">#{incident.riskRank}</p>
                     </div>
 
-                    <div className="flex items-center gap-3 mt-1.5">
-                      {incident.location && (
-                        <span className="text-[10px] text-slate-500 flex items-center gap-0.5">
-                          <MapPin className="h-2.5 w-2.5" />
-                          {incident.location}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Badge className={`text-[10px] px-1.5 py-0 ${SEVERITY_COLORS[incident.severity]}`}>
+                          {incident.severity.toUpperCase()}
+                        </Badge>
+                        {incident.status === "active" && (
+                          <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse-status" />
+                        )}
+                      </div>
+                      <h4 className="text-sm font-medium text-slate-200 truncate">{incident.title}</h4>
+                      <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">{incident.description}</p>
+
+                      {/* First-responder indicator badges */}
+                      <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                        {meta.humanLife && (
+                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30">
+                            <User className="h-2 w-2" />
+                            Human life
+                          </span>
+                        )}
+                        {meta.noHumanLife && !meta.humanLife && (
+                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-slate-700/50 text-slate-500 border border-slate-700/30">
+                            <User className="h-2 w-2" />
+                            No humans
+                          </span>
+                        )}
+                        {meta.animals && (
+                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                            <PawPrint className="h-2 w-2" />
+                            Animals
+                          </span>
+                        )}
+                        {meta.objects && (
+                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-slate-700/50 text-slate-400 border border-slate-600/30">
+                            <Box className="h-2 w-2" />
+                            {meta.objects.length > 30 ? meta.objects.slice(0, 30) + "…" : meta.objects}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-3 mt-1.5">
+                        {incident.location && (
+                          <span className="text-[10px] text-slate-500 flex items-center gap-0.5">
+                            <MapPin className="h-2.5 w-2.5" />
+                            {incident.location}
+                          </span>
+                        )}
+                        <span className="text-[10px] text-slate-600 flex items-center gap-0.5">
+                          <Clock className="h-2.5 w-2.5" />
+                          {new Date(incident.createdAt).toLocaleTimeString()}
                         </span>
-                      )}
-                      <span className="text-[10px] text-slate-600 flex items-center gap-0.5">
-                        <Clock className="h-2.5 w-2.5" />
-                        {new Date(incident.createdAt).toLocaleTimeString()}
-                      </span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex flex-col gap-1 shrink-0">
-                    <Button
-                      size="sm"
-                      className="h-6 px-2 text-[10px] bg-blue-600 hover:bg-blue-700"
-                      onClick={() => onAlert(incident.id)}
-                      data-testid={`alert-btn-${incident.id}`}
-                    >
-                      <Phone className="h-2.5 w-2.5 mr-0.5" />
-                      Alert
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 px-2 text-[10px] border-slate-700 hover:bg-slate-800"
-                      onClick={() => onAnalyze(incident.id)}
-                      data-testid={`analyze-btn-${incident.id}`}
-                    >
-                      <Zap className="h-2.5 w-2.5 mr-0.5" />
-                      Analyze
-                    </Button>
+
+                    <div className="flex flex-col gap-1 shrink-0">
+                      <Button
+                        size="sm"
+                        className="h-6 px-2 text-[10px] bg-blue-600 hover:bg-blue-700"
+                        onClick={() => onAlert(incident.id)}
+                        data-testid={`alert-btn-${incident.id}`}
+                      >
+                        <Phone className="h-2.5 w-2.5 mr-0.5" />
+                        Alert
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 px-2 text-[10px] border-slate-700 hover:bg-slate-800"
+                        onClick={() => onAnalyze(incident.id)}
+                        data-testid={`analyze-btn-${incident.id}`}
+                      >
+                        <Zap className="h-2.5 w-2.5 mr-0.5" />
+                        Analyze
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </>
         )}
       </div>
     </ScrollArea>
@@ -1092,6 +1196,21 @@ export default function Dashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [maximizedPanel, setMaximizedPanel] = useState<string | null>(null);
+  const rankingSyncInFlightRef = useRef(false);
+  const analyzingIncidentsRef = useRef(new Set<number>());
+
+  const analyzeAndRefreshRankings = useCallback(async (incidentId: number) => {
+    if (analyzingIncidentsRef.current.has(incidentId)) return;
+    analyzingIncidentsRef.current.add(incidentId);
+    try {
+      await apiRequest("POST", `/api/modules/risk-analysis/analyze/${incidentId}`);
+      queryClient.invalidateQueries({ queryKey: ["/api/modules/risk-analysis"] });
+    } catch {
+      // silent
+    } finally {
+      analyzingIncidentsRef.current.delete(incidentId);
+    }
+  }, [queryClient]);
 
   useEffect(() => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -1105,6 +1224,11 @@ export default function Dashboard() {
         const message = JSON.parse(event.data);
         if (message.event?.includes("incident")) {
           queryClient.invalidateQueries({ queryKey: ["/api/incidents"] });
+          // Immediately score any newly created incident
+          const incidentId = message.data?.incident?.id ?? message.data?.incidentId;
+          if (typeof incidentId === "number") {
+            void analyzeAndRefreshRankings(incidentId);
+          }
         }
         if (message.event?.includes("module_health")) {
           queryClient.invalidateQueries({ queryKey: ["/api/health"] });
@@ -1114,9 +1238,17 @@ export default function Dashboard() {
         }
         if (message.event?.includes("camera") || message.event?.includes("detection")) {
           queryClient.invalidateQueries({ queryKey: ["/api/modules/camera-processing/feeds"] });
+          // Re-score the incident linked to this detection
+          const incidentId = message.data?.detection?.incidentId ?? message.data?.incidentId;
+          if (typeof incidentId === "number") {
+            void analyzeAndRefreshRankings(incidentId);
+          }
         }
         if (message.event?.includes("contact")) {
           queryClient.invalidateQueries({ queryKey: ["/api/modules/contact-management"] });
+        }
+        if (message.event?.includes("risk")) {
+          queryClient.invalidateQueries({ queryKey: ["/api/modules/risk-analysis"] });
         }
       } catch {}
     };
@@ -1133,6 +1265,11 @@ export default function Dashboard() {
 
   const { data: incidents = [] } = useQuery<Incident[]>({
     queryKey: ["/api/incidents"],
+    refetchInterval: 5000,
+  });
+
+  const { data: riskAssessments = [] } = useQuery<RiskAssessment[]>({
+    queryKey: ["/api/modules/risk-analysis"],
     refetchInterval: 5000,
   });
 
@@ -1187,6 +1324,7 @@ export default function Dashboard() {
     async (incidentId: number) => {
       try {
         await apiRequest("POST", `/api/modules/risk-analysis/analyze/${incidentId}`);
+        queryClient.invalidateQueries({ queryKey: ["/api/modules/risk-analysis"] });
         toast({ title: "Analysis Queued", description: "AI risk assessment in progress." });
       } catch {
         toast({ title: "Error", description: "Failed to analyze risk.", variant: "destructive" });
@@ -1261,9 +1399,41 @@ export default function Dashboard() {
     }
   }, [incidents, toast]);
 
-  const activeIncidents = incidents.filter((i) => i.status === "active");
+  const activeIncidents = useMemo(
+    () => rankIncidentsByRisk(incidents.filter((i) => i.status === "active"), riskAssessments),
+    [incidents, riskAssessments],
+  );
+  const activeIncidentIdsKey = useMemo(
+    () => incidents.filter((i) => i.status === "active").map((i) => i.id).sort((a, b) => a - b).join(","),
+    [incidents],
+  );
   const criticalCount = incidents.filter((i) => i.severity === "critical" && i.status === "active").length;
   const displayFeeds = cameraFeeds.slice(0, 4);
+
+  useEffect(() => {
+    let isMounted = true;
+    const syncRankings = async () => {
+      if (!isMounted) return;
+      if (!activeIncidentIdsKey) return;
+      if (rankingSyncInFlightRef.current) return;
+      rankingSyncInFlightRef.current = true;
+      try {
+        await apiRequest("POST", "/api/modules/risk-analysis/analyze-all?cooldownSeconds=15");
+        queryClient.invalidateQueries({ queryKey: ["/api/modules/risk-analysis"] });
+      } catch {
+        // Silent background sync failure
+      } finally {
+        rankingSyncInFlightRef.current = false;
+      }
+    };
+
+    void syncRankings();
+    const timer = setInterval(syncRankings, 8000);
+    return () => {
+      isMounted = false;
+      clearInterval(timer);
+    };
+  }, [activeIncidentIdsKey, queryClient]);
 
   const getHealthIcon = (name: string) => {
     const m = moduleHealth.find((h) => h.moduleName === name);

@@ -1,8 +1,9 @@
 import { Router, Request, Response } from "express";
   import { db } from "../../db";
-  import { robocalls, contacts, incidents } from "@shared/schema";
+  import { robocalls, incidents } from "@shared/schema";
   import { eq, desc, sql } from "drizzle-orm";
   import { openai } from "../../replit_integrations/audio/client";
+  import { triggerRobocall } from "./trigger";
 
   const router = Router();
 
@@ -54,13 +55,11 @@ import { Router, Request, Response } from "express";
     }
   });
 
-  // Initiate robocall for incident
+  // Initiate robocall for incident (called by the Alert button in the dashboard)
   router.post("/incident/:incidentId", async (req: Request, res: Response) => {
     try {
       const incidentId = parseInt(req.params.incidentId as string);
-      const { priority = 1 } = req.body;
 
-      // Get incident details
       const [incident] = await db
         .select()
         .from(incidents)
@@ -71,39 +70,29 @@ import { Router, Request, Response } from "express";
         return res.status(404).json({ error: "Incident not found" });
       }
 
-      // Get active contacts based on priority
-      const priorityContacts = await db
-        .select()
-        .from(contacts)
-        .where(eq(contacts.isActive, true))
-        .orderBy(contacts.priority);
+      // Derive detection type from incident title ("Fire Detected — Camera 1" → "fire")
+      const title = incident.title ?? "";
+      const detectionType = title.includes(" Detected")
+        ? title.split(" Detected")[0].toLowerCase().trim()
+        : "anomaly";
 
-      const message = `Emergency Alert: ${incident.title}. ${incident.description}. Severity level: ${incident.severity}. Location: ${incident.location || "Unknown"}. Please respond immediately.`;
-
-      // Create robocalls for all priority contacts
-      const newRobocalls = await Promise.all(
-        priorityContacts.map(async (contact) => {
-          const [robocall] = await db
-            .insert(robocalls)
-            .values({
-              incidentId,
-              contactId: contact.id,
-              message,
-              status: "pending",
-              attempts: 0,
-            })
-            .returning();
-          return robocall;
-        })
-      );
-
-      res.json({ 
-        message: `Created ${newRobocalls.length} robocalls`,
-        robocalls: newRobocalls 
+      // Fire-and-forget — spawns robocaller.py, does not block
+      triggerRobocall(incidentId, {
+        detectionType,
+        confidence: 0,
+        sceneContext: "",
+        humanLifePresent: false,
+        inanimateObjects: "",
+        description: incident.description,
+        severity: incident.severity,
+        location: incident.location ?? "Unknown",
+        cameraName: "",
       });
+
+      res.json({ message: `Robocall triggered for incident #${incidentId}` });
     } catch (error) {
-      console.error("Error initiating robocalls:", error);
-      res.status(500).json({ error: "Failed to initiate robocalls" });
+      console.error("Error initiating robocall:", error);
+      res.status(500).json({ error: "Failed to initiate robocall" });
     }
   });
 

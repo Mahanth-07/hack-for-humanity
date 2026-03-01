@@ -1,0 +1,210 @@
+Build a modern web dashboard for a real-time AI incident detection and automated authority notification system. Note that the goal is not to build any back end, but rather just a frontend that can be later handled to actually build out the features we are looking for.
+
+This is a demo platform that simulates four live camera feeds using uploaded MP4 video files.
+
+The UI must be clean, professional, and organized like a monitoring command center.
+
+MAIN LAYOUT STRUCTURE
+
+The dashboard should have 3 primary sections:
+	1.	Top Section: Four Camera Feed Cards
+	2.	Middle Section: Live Incident Map + Incident Feed
+	3.	Bottom Section: Contact Database + Robocaller Console
+
+The layout should feel like a control room interface.
+
+SECTION 1: CAMERA FEED CARDS (TOP)
+
+Create four rectangular cards in a responsive grid (2x2 layout on desktop, stacked on mobile).
+
+Each card represents one camera.
+
+Each card must include:
+	•	Title: Location Preferably
+	•	Upload button for MP4 file
+	•	Drag-and-drop upload area
+	•	Video preview player after upload
+	•	Status indicator badge:
+	•	Idle (gray)
+	•	Analyzing (blue)
+	•	Incident Detected (red)
+	•	Calling Authority (orange)
+	•	Resolved (green)
+
+When a file is uploaded:
+	•	Display video preview
+	•	Simulate processing animation
+	•	Trigger a mock “analyzing” state
+
+The cards should visually update in real time when an incident is detected. 
+
+SECTION 2: LIVE INCIDENT MAP + EVENT FEED (MIDDLE)
+
+Split this section into two panels:
+
+Left side: Interactive Map
+Right side: Live Incident Feed
+
+Map Requirements
+
+Use Mapbox or Google Maps.
+
+The map must:
+	•	Display pins for each camera location
+	•	When no incident: neutral gray pin
+	•	When incident detected:
+	•		Yellow for medium
+	•		Orange for high
+	•		Red for critical
+
+Clicking a pin should open a modal showing:
+	•	Camera name
+	•	Incident type (fire, vehicle collision, illegal dumping)
+	•	Severity level
+	•	Confidence score
+	•	Timestamp
+	•	Video clip (embedded player)
+	•	Current status:
+	•		Validating
+	•		Calling Authority
+	•		Call Connected
+	•		Call Completed
+
+The pin color should dynamically change as status updates.
+
+⸻
+
+Live Incident Feed Panel
+
+This panel should display a scrolling list of incidents.
+
+Each entry must show:
+	•	Camera name
+	•	Incident type
+	•	Severity
+	•	Timestamp
+	•	Authority being contacted
+	•	Call status
+
+Newest incidents appear at the top.
+
+Include visual indicators:
+	•	Flashing red border for new critical incidents
+	•	Icons for fire, collision, environmental hazard
+
+⸻
+
+SECTION 3: CONTACT DATABASE (BOTTOM LEFT)
+
+Create a full contact management interface.
+
+Title: “Authority Contact Database”
+
+Features:
+	•	Table displaying:
+	•	Contact Name
+	•	Contact Type (fire_department, police, environmental_protection, emergency_medical)
+	•	Phone Number
+	•	Jurisdiction
+	•	Edit button
+	•	Delete button
+
+Include:
+	•	“Add Contact” button
+	•	Modal form to add:
+	•	Contact name
+	•	Authority type dropdown
+	•	Phone number
+	•	Jurisdiction region
+
+This database determines who the robocaller will contact when an incident is detected.
+
+Contacts should be stored in state and mock-synced with backend endpoints.
+
+⸻
+
+SECTION 4: ROBOCALLER CONSOLE (BOTTOM RIGHT)
+
+Create a live “Robocaller Execution Console”.
+
+This should look like a terminal panel.
+
+Include:
+	•	Current Call Status:
+	•	Dialing
+	•	Ringing
+	•	Connected
+	•	Speaking
+	•	Awaiting Response
+	•	Completed
+	•	Failed
+	•	Transcript display window:
+	•	Show generated robocall script line by line
+	•	Animate text appearing as if being spoken
+	•	If authority “responds,” simulate response text
+	•	Call Metadata Panel:
+	•	Incident ID
+	•	Authority Name
+	•	Phone Number
+	•	Duration
+	•	Start Time
+	•	End Time
+
+Add a visual waveform animation when call is active.
+
+⸻
+
+SYSTEM INTERACTION FLOW
+
+When an incident is detected in one of the four uploaded videos:
+	1.	The corresponding camera card turns red.
+	2.	A new incident appears in the Live Incident Feed.
+	3.	A pin appears on the map.
+	4.	The system checks the Contact Database.
+	5.	It matches incident type → authority type.
+	6.	The Robocaller Console activates.
+	7.	Call transcript begins rendering.
+	8.	Call status updates live.
+	9.	When call ends:
+	•	Incident feed updates
+	•	Map pin status updates
+	•	Camera card updates to “Resolved”
+
+All transitions should animate smoothly.
+
+⸻
+
+STATE MANAGEMENT
+
+This is what we need you to plan. Figure out what backend API calls you would like to use, and we will implement them separately for your use.
+
+⸻
+
+VISUAL DESIGN
+
+Use:
+	•	Dark theme (command center feel)
+	•	Subtle glow effects on active elements
+	•	Clear severity color system
+	•	Clean typography
+	•	Rounded corners
+	•	Professional spacing
+
+Avoid clutter.
+
+⸻
+
+FINAL RESULT
+
+The finished frontend must simulate a complete real-time AI-powered emergency detection and autonomous authority notification system.
+
+It should clearly demonstrate:
+	•	Multi-camera monitoring
+	•	AI detection workflow
+	•	Authority routing
+	•	Automated robocalling
+	•	Live call transcript execution
+	•	Interactive incident map
+	•	Contact management system
+
+The interface should feel like a real operational control dashboard, not just a basic demo page.

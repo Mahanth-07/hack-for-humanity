@@ -10,18 +10,17 @@ import { Router, Request, Response } from "express";
     try {
       const { role, active } = req.query;
       
-      let query = db.select().from(contacts);
-      
+      let query = db.select().from(contacts).$dynamic();
+
       if (role) {
         query = query.where(eq(contacts.role, role as string));
       }
-      
+
       if (active !== undefined) {
         query = query.where(eq(contacts.isActive, active === 'true'));
       }
-      
-      const allContacts = await query.orderBy(asc(contacts.priority), asc(contacts.name));
-      res.json(allContacts);
+
+const allContacts = await query.orderBy(asc(contacts.priority), asc(contacts.name));      res.json(allContacts);
     } catch (error) {
       console.error("Error fetching contacts:", error);
       res.status(500).json({ error: "Failed to fetch contacts" });
@@ -31,7 +30,7 @@ import { Router, Request, Response } from "express";
   // Get contact by ID
   router.get("/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       const [contact] = await db
         .select()
         .from(contacts)
@@ -81,7 +80,7 @@ import { Router, Request, Response } from "express";
   // Update contact
   router.patch("/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       const { name, phone, email, role, priority, isActive, metadata } = req.body;
 
       const updateData: any = {};
@@ -113,7 +112,7 @@ import { Router, Request, Response } from "express";
   // Delete contact
   router.delete("/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
 
       const [deleted] = await db
         .delete(contacts)
@@ -134,7 +133,7 @@ import { Router, Request, Response } from "express";
   // Toggle contact active status
   router.patch("/:id/toggle", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
 
       const [contact] = await db
         .select()
@@ -162,7 +161,7 @@ import { Router, Request, Response } from "express";
   // Get contacts by role
   router.get("/role/:role", async (req: Request, res: Response) => {
     try {
-      const role = req.params.role;
+      const role = req.params.role as string;
       const contactsByRole = await db
         .select()
         .from(contacts)

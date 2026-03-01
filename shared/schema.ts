@@ -85,16 +85,18 @@ import { sql } from "drizzle-orm";
   export type InsertRobocall = z.infer<typeof insertRobocallSchema>;
 
   // Risk Assessments table
-  export const riskAssessments = pgTable("risk_assessments", {
-    id: serial("id").primaryKey(),
-    incidentId: integer("incident_id").references(() => incidents.id).notNull(),
-    riskScore: integer("risk_score").notNull(), // 0-100
-    threatLevel: text("threat_level").notNull(), // low, moderate, high, severe
-    analysis: text("analysis").notNull(),
-    recommendations: jsonb("recommendations"), // array of recommended actions
-    factors: jsonb("factors"), // contributing risk factors
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-  });
+export const riskAssessments = pgTable("risk_assessments", {
+  id: serial("id").primaryKey(),
+  incidentId: integer("incident_id").references(() => incidents.id).notNull(),
+  riskScore: integer("risk_score").notNull(), // 0-100
+  severity: text("severity"), // low, medium, high, severe
+  threatLevel: text("threat_level").notNull(), // low, moderate, high, severe
+  priorityScore: integer("priority_score"), // bounded ranking score
+  analysis: text("analysis").notNull(),
+  recommendations: jsonb("recommendations"), // array of recommended actions
+  factors: jsonb("factors"), // contributing risk factors
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 
   export const insertRiskAssessmentSchema = createInsertSchema(riskAssessments).omit({
     id: true,
@@ -109,7 +111,6 @@ import { sql } from "drizzle-orm";
     id: serial("id").primaryKey(),
     name: text("name").notNull(),
     location: text("location").notNull(),
-    coordinates: jsonb("coordinates"),
     streamUrl: text("stream_url"),
     videoUrl: text("video_url"),
     status: text("status").notNull().default("idle"),

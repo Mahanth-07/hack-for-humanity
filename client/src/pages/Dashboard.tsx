@@ -92,7 +92,7 @@ type Contact = {
   role: string;
   priority: number;
   isActive: boolean;
-  metadata?: { location?: string; [key: string]: unknown };
+  metadata?: { location?: string;[key: string]: unknown };
   createdAt: string;
 };
 
@@ -125,8 +125,16 @@ const SEVERITY_COLORS: Record<string, string> = {
   low: "bg-blue-500 text-white",
 };
 
+const MODULE_STATUS_CONFIG: Record<string, { color: string; pulse: boolean }> = {
+  running: { color: "bg-green-500", pulse: true },
+  processing: { color: "bg-blue-500", pulse: true },
+  idle: { color: "bg-muted", pulse: false },
+  error: { color: "bg-destructive", pulse: false },
+  offline: { color: "bg-muted", pulse: false },
+};
+
 const STATUS_BADGE: Record<string, { color: string; pulse: boolean }> = {
-  idle: { color: "bg-slate-500", pulse: false },
+  idle: { color: "bg-muted", pulse: false },
   analyzing: { color: "bg-blue-500", pulse: true },
   incident: { color: "bg-red-600", pulse: true },
   calling: { color: "bg-orange-500", pulse: true },
@@ -211,16 +219,16 @@ const VALID_LOCATIONS = [
 
 // Icon + label for each detection type shown in the hazard overlay
 const DETECTION_ICON: Record<string, { icon: React.ReactNode; label: string }> = {
-  fire:          { icon: <Flame className="h-8 w-8 text-red-400 animate-pulse mb-1" />,      label: "Fire" },
-  flood:         { icon: <Droplets className="h-8 w-8 text-blue-400 animate-pulse mb-1" />,  label: "Flood" },
-  crash:         { icon: <Car className="h-8 w-8 text-orange-400 animate-pulse mb-1" />,     label: "Vehicle Crash" },
-  fight:         { icon: <Swords className="h-8 w-8 text-red-400 animate-pulse mb-1" />,     label: "Fight / Assault" },
-  weapon:        { icon: <CircleAlert className="h-8 w-8 text-red-500 animate-pulse mb-1" />, label: "Weapon" },
-  hazmat:        { icon: <FlaskConical className="h-8 w-8 text-yellow-400 animate-pulse mb-1" />, label: "Hazmat" },
-  structural:    { icon: <Building2 className="h-8 w-8 text-orange-400 animate-pulse mb-1" />, label: "Structural Damage" },
-  medical:       { icon: <HeartPulse className="h-8 w-8 text-pink-400 animate-pulse mb-1" />, label: "Medical Emergency" },
-  environmental: { icon: <Leaf className="h-8 w-8 text-green-400 animate-pulse mb-1" />,     label: "Environmental Hazard" },
-  anomaly:       { icon: <CircleAlert className="h-8 w-8 text-yellow-400 animate-pulse mb-1" />, label: "Anomaly" },
+  fire: { icon: <Flame className="h-8 w-8 text-red-400 animate-pulse mb-1" />, label: "Fire" },
+  flood: { icon: <Droplets className="h-8 w-8 text-blue-400 animate-pulse mb-1" />, label: "Flood" },
+  crash: { icon: <Car className="h-8 w-8 text-orange-400 animate-pulse mb-1" />, label: "Vehicle Crash" },
+  fight: { icon: <Swords className="h-8 w-8 text-red-400 animate-pulse mb-1" />, label: "Fight / Assault" },
+  weapon: { icon: <CircleAlert className="h-8 w-8 text-red-500 animate-pulse mb-1" />, label: "Weapon" },
+  hazmat: { icon: <FlaskConical className="h-8 w-8 text-yellow-400 animate-pulse mb-1" />, label: "Hazmat" },
+  structural: { icon: <Building2 className="h-8 w-8 text-orange-400 animate-pulse mb-1" />, label: "Structural Damage" },
+  medical: { icon: <HeartPulse className="h-8 w-8 text-pink-400 animate-pulse mb-1" />, label: "Medical Emergency" },
+  environmental: { icon: <Leaf className="h-8 w-8 text-green-400 animate-pulse mb-1" />, label: "Environmental Hazard" },
+  anomaly: { icon: <CircleAlert className="h-8 w-8 text-yellow-400 animate-pulse mb-1" />, label: "Anomaly" },
 };
 
 function CameraFeedCard({
@@ -383,19 +391,19 @@ function CameraFeedCard({
       if (analyzeIntervalRef.current) clearInterval(analyzeIntervalRef.current);
       clearTimeout(initial);
     };
-  // Only re-run when a new local video is selected — NOT on feed.videoUrl/feed.location changes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Only re-run when a new local video is selected — NOT on feed.videoUrl/feed.location changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localVideoUrl, feed.id]);
 
   const statusInfo = STATUS_BADGE[feed.status] || STATUS_BADGE.idle;
   const hasVideo = localVideoUrl || feed.videoUrl;
 
   return (
-    <Card className="bg-slate-900/80 border-slate-700/50 overflow-hidden group relative" data-testid={`camera-card-${feed.id}`}>
+    <Card className="saas-card saas-card-hover group relative overflow-hidden" data-testid={`camera-card-${feed.id}`}>
       {/* Hidden canvas for frame extraction */}
       <canvas ref={canvasRef} className="hidden" />
 
-      <div className="relative aspect-video bg-slate-950 overflow-hidden">
+      <div className="relative aspect-video bg-background overflow-hidden">
         {hasVideo ? (
           <video
             ref={videoRef}
@@ -409,11 +417,10 @@ function CameraFeedCard({
           />
         ) : (
           <div
-            className={`w-full h-full flex flex-col items-center justify-center cursor-pointer transition-all duration-200 ${
-              isDragOver
-                ? "bg-blue-500/20 border-2 border-dashed border-blue-400"
-                : "bg-slate-950 hover:bg-slate-900/50"
-            }`}
+            className={`w-full h-full flex flex-col items-center justify-center cursor-pointer transition-all duration-200 ${isDragOver
+              ? "bg-primary/20 border-2 border-dashed border-primary"
+              : "bg-background hover:bg-background/80"
+              }`}
             onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
             onDragLeave={() => setIsDragOver(false)}
             onDrop={handleDrop}
@@ -427,8 +434,8 @@ function CameraFeedCard({
               </>
             ) : (
               <>
-                <Upload className="h-8 w-8 text-slate-600 mb-2" />
-                <span className="text-xs text-slate-500">Drop MP4 or click</span>
+                <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                <span className="text-xs text-muted-foreground">Drop MP4 or click</span>
               </>
             )}
             <input
@@ -480,8 +487,8 @@ function CameraFeedCard({
               LIVE
             </span>
           ) : (
-            <span className="flex items-center gap-1 text-[10px] font-medium text-slate-500 bg-black/60 px-1.5 py-0.5 rounded">
-              <span className="h-2 w-2 rounded-full bg-slate-600" />
+            <span className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground bg-black/60 px-1.5 py-0.5 rounded">
+              <span className="h-2 w-2 rounded-full bg-muted-foreground" />
               INACTIVE
             </span>
           )}
@@ -529,25 +536,25 @@ function CameraFeedCard({
         )}
       </div>
 
-      <div className="p-3">
+      <div className="p-4 bg-white flex flex-col flex-1">
         <div className="flex items-center justify-between">
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-slate-200 truncate" data-testid={`camera-name-${feed.id}`}>{feed.name}</h3>
-            <p className="text-[11px] text-slate-500 flex items-center gap-1 truncate">
+            <h3 className="text-[13px] font-bold text-card-foreground truncate font-heading" data-testid={`camera-name-${feed.id}`}>{feed.name}</h3>
+            <p className="text-[11px] font-medium text-muted-foreground flex items-center gap-1 truncate mt-0.5">
               <MapPin className="h-3 w-3 shrink-0" />
               {feed.location}
             </p>
           </div>
-          <div className="flex items-center gap-1 ml-2">
+          <div className="flex items-center gap-1 ml-2 shrink-0">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    className="p-1.5 rounded hover:bg-slate-800 transition-colors"
+                    className="p-1.5 rounded-md hover:bg-secondary transition-colors group/btn"
                     onClick={() => fileInputRef.current?.click()}
                     data-testid={`upload-btn-${feed.id}`}
                   >
-                    <Video className="h-3.5 w-3.5 text-slate-400" />
+                    <Video className="h-4 w-4 text-muted-foreground group-hover/btn:text-foreground" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>Upload MP4</TooltipContent>
@@ -557,15 +564,15 @@ function CameraFeedCard({
         </div>
 
         {showLocationInput && (
-          <div className="mt-2 flex flex-col gap-1.5" data-testid={`location-input-${feed.id}`}>
-            <div className="flex items-center gap-1.5">
+          <div className="mt-3 flex flex-col gap-2" data-testid={`location-input-${feed.id}`}>
+            <div className="flex items-center gap-2">
               <div className="relative flex-1">
-                <MapPin className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-500 pointer-events-none z-10" />
+                <MapPin className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none z-10" />
                 <select
                   ref={locationInputRef}
                   value={locationValue}
                   onChange={(e) => setLocationValue(e.target.value)}
-                  className="w-full pl-6 pr-2 py-1.5 text-[11px] bg-slate-800 border border-slate-600 rounded text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 appearance-none"
+                  className="w-full pl-8 pr-2 py-1.5 text-[11px] font-medium bg-background border border-border rounded-md text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 appearance-none shadow-sm transition-colors"
                   data-testid={`location-select-${feed.id}`}
                 >
                   <option value="">— Select a US city —</option>
@@ -577,17 +584,17 @@ function CameraFeedCard({
               <button
                 onClick={handleSaveLocation}
                 disabled={!locationValue || !VALID_LOCATIONS.includes(locationValue) || isSavingLocation}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium rounded bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold tracking-wide uppercase rounded-md bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground text-primary-foreground transition-colors shadow-sm"
                 data-testid={`save-location-${feed.id}`}
               >
-                {isSavingLocation ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                {isSavingLocation ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                 Save
               </button>
               <button
                 onClick={() => { setShowLocationInput(false); setLocationValue(""); }}
-                className="p-1.5 rounded hover:bg-slate-800 text-slate-500 hover:text-slate-300 transition-colors"
+                className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
               >
-                <X className="h-3 w-3" />
+                <X className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
@@ -619,7 +626,7 @@ function IncidentMap({ incidents }: { incidents: Incident[] }) {
     .filter(Boolean) as Array<{ incident: Incident; coords: [number, number] }>;
 
   return (
-    <div className="relative w-full h-full bg-slate-950 rounded-lg overflow-hidden" data-testid="incident-map">
+    <div className="relative w-full h-full bg-secondary/30 rounded-lg overflow-hidden" data-testid="incident-map">
       <ComposableMap
         projection="geoAlbersUsa"
         projectionConfig={{ scale: 1000 }}
@@ -631,12 +638,12 @@ function IncidentMap({ incidents }: { incidents: Incident[] }) {
               <Geography
                 key={geo.rsmKey}
                 geography={geo}
-                fill="#1e293b"
-                stroke="#334155"
-                strokeWidth={0.5}
+                fill="#E8E6E1"
+                stroke="#FFFFFF"
+                strokeWidth={1}
                 style={{
                   default: { outline: "none" },
-                  hover: { outline: "none", fill: "#1e293b" },
+                  hover: { outline: "none", fill: "#D4D2CD" },
                   pressed: { outline: "none" },
                 }}
               />
@@ -658,8 +665,8 @@ function IncidentMap({ incidents }: { incidents: Incident[] }) {
               {/* Label */}
               <text
                 textAnchor="middle"
-                y={-10}
-                style={{ fontSize: "8px", fontWeight: "bold", fill: "white", pointerEvents: "none" }}
+                y={-12}
+                style={{ fontSize: "9px", fontWeight: "900", fill: "#1A2B4A", pointerEvents: "none", filter: "drop-shadow(0px 1px 2px rgba(255,255,255,0.8))" }}
               >
                 {incident.title.length > 18 ? incident.title.slice(0, 18) + "…" : incident.title}
               </text>
@@ -669,16 +676,16 @@ function IncidentMap({ incidents }: { incidents: Incident[] }) {
       </ComposableMap>
 
       {/* Legend */}
-      <div className="absolute bottom-2 left-2 flex items-center gap-3 bg-black/60 rounded px-2 py-1">
+      <div className="absolute bottom-3 left-3 flex items-center gap-3 bg-white/90 border border-border shadow-sm backdrop-blur-sm rounded-lg px-3 py-2">
         {["critical", "high", "medium", "low"].map((sev) => (
-          <div key={sev} className="flex items-center gap-1">
+          <div key={sev} className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full" style={{ backgroundColor: SEVERITY_PIN_COLORS[sev] }} />
-            <span className="text-[9px] text-slate-400 capitalize">{sev}</span>
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{sev}</span>
           </div>
         ))}
       </div>
 
-      <div className="absolute top-2 left-2 text-[10px] text-slate-500 bg-black/50 px-2 py-0.5 rounded">
+      <div className="absolute top-3 left-3 text-[10px] font-bold tracking-wider text-primary bg-primary/10 border border-primary/20 shadow-sm px-2.5 py-1 rounded-md uppercase backdrop-blur-sm">
         {activeIncidents.length} active incident{activeIncidents.length !== 1 ? "s" : ""}
       </div>
     </div>
@@ -770,28 +777,28 @@ function LiveIncidentFeed({
   onAnalyze: (id: number) => void;
 }) {
   const rankBadgeClasses = (severity: string) => {
-    if (severity === "critical") return "border-red-500/80 bg-red-500/20 text-red-200";
-    if (severity === "high") return "border-orange-500/80 bg-orange-500/20 text-orange-200";
-    if (severity === "medium") return "border-amber-500/80 bg-amber-500/20 text-amber-200";
-    return "border-slate-600 bg-slate-700/50 text-slate-300";
+    if (severity === "critical") return "border-red-200 bg-red-50 text-red-700";
+    if (severity === "high") return "border-orange-200 bg-orange-50 text-orange-700";
+    if (severity === "medium") return "border-amber-200 bg-amber-50 text-amber-700";
+    return "border-border bg-secondary text-muted-foreground";
   };
 
   const cardBorderClasses = (rank: number, severity: string) => {
-    if (rank === 1) return "border-red-500/70 bg-red-500/8 shadow-[0_0_0_1px_rgba(239,68,68,0.25)]";
-    if (rank === 2) return "border-orange-500/60 bg-orange-500/6";
-    if (rank === 3) return "border-amber-500/60 bg-amber-500/6";
-    if (severity === "critical") return "border-red-500/30";
-    if (severity === "high") return "border-orange-500/30";
-    return "border-slate-700/50";
+    if (rank === 1) return "border-red-300 bg-white shadow-[0_4px_20px_-4px_rgba(239,68,68,0.15)] ring-1 ring-red-100";
+    if (rank === 2) return "border-orange-200 bg-white";
+    if (rank === 3) return "border-amber-200 bg-white";
+    if (severity === "critical") return "border-red-200";
+    if (severity === "high") return "border-orange-200";
+    return "border-border/60";
   };
 
   return (
     <ScrollArea className="h-full" data-testid="incident-feed">
-      <div className="space-y-2 pr-3">
+      <div className="space-y-3 pr-4">
         {incidents.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-slate-500">
-            <CheckCircle2 className="h-8 w-8 mb-2 opacity-50" />
-            <p className="text-sm">No active incidents</p>
+          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+            <CheckCircle2 className="h-10 w-10 mb-3 opacity-30" />
+            <p className="text-sm font-medium">No active incidents</p>
           </div>
         ) : (
           <>
@@ -801,88 +808,88 @@ function LiveIncidentFeed({
               return (
                 <div
                   key={incident.id}
-                  className={`p-3 bg-slate-900/60 rounded-lg border hover:border-slate-600/50 transition-colors ${cardBorderClasses(incident.riskRank ?? 999, incident.severity)}`}
+                  className={`p-4 bg-white rounded-xl shadow-xs border transition-all duration-200 hover:-translate-y-[1px] hover:shadow-md hover:border-border/80 ${cardBorderClasses(incident.riskRank ?? 999, incident.severity)}`}
                   data-testid={`incident-card-${incident.id}`}
                 >
-                  <div className="flex items-start gap-2">
+                  <div className="flex items-start gap-4">
                     {/* Rank block */}
-                    <div className={`shrink-0 min-w-[52px] rounded-md border px-1.5 py-1 text-center ${rankBadgeClasses(incident.severity)}`}>
-                      <p className="text-[9px] uppercase tracking-wide opacity-70">Rank</p>
-                      <p className="text-lg font-extrabold leading-none">#{incident.riskRank}</p>
+                    <div className={`shrink-0 min-w-[56px] rounded-lg border px-2 py-1.5 text-center flex flex-col items-center justify-center ${rankBadgeClasses(incident.severity)}`}>
+                      <p className="text-[9px] font-bold uppercase tracking-widest opacity-80 mb-0.5">Rank</p>
+                      <p className="text-xl font-black leading-none font-heading">#{incident.riskRank}</p>
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Badge className={`text-[10px] px-1.5 py-0 ${SEVERITY_COLORS[incident.severity]}`}>
-                          {incident.severity.toUpperCase()}
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <Badge className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border-none ${SEVERITY_COLORS[incident.severity]}`}>
+                          {incident.severity}
                         </Badge>
                         {incident.status === "active" && (
-                          <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse-status" />
+                          <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse-status shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
                         )}
                       </div>
-                      <h4 className="text-sm font-medium text-slate-200 truncate">{incident.title}</h4>
-                      <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">{incident.description}</p>
+                      <h4 className="text-[14px] font-bold text-foreground truncate font-heading leading-tight">{incident.title}</h4>
+                      <p className="text-[12px] font-medium text-muted-foreground line-clamp-2 mt-1 leading-relaxed pr-2">{incident.description}</p>
 
                       {/* First-responder indicator badges */}
-                      <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
                         {meta.humanLife && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30">
-                            <User className="h-2 w-2" />
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-red-50 text-red-700 border border-red-200 shadow-sm">
+                            <User className="h-2.5 w-2.5" />
                             Human life
                           </span>
                         )}
                         {meta.noHumanLife && !meta.humanLife && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-slate-700/50 text-slate-500 border border-slate-700/30">
-                            <User className="h-2 w-2" />
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-secondary text-muted-foreground border border-border shadow-sm">
+                            <User className="h-2.5 w-2.5" />
                             No humans
                           </span>
                         )}
                         {meta.animals && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                            <PawPrint className="h-2 w-2" />
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 shadow-sm">
+                            <PawPrint className="h-2.5 w-2.5" />
                             Animals
                           </span>
                         )}
                         {meta.objects && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-slate-700/50 text-slate-400 border border-slate-600/30">
-                            <Box className="h-2 w-2" />
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-primary/5 text-primary border border-primary/20 shadow-sm">
+                            <Box className="h-2.5 w-2.5" />
                             {meta.objects.length > 30 ? meta.objects.slice(0, 30) + "…" : meta.objects}
                           </span>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-3 mt-1.5">
+                      <div className="flex items-center gap-4 mt-2.5 pt-2.5 border-t border-border/50">
                         {incident.location && (
-                          <span className="text-[10px] text-slate-500 flex items-center gap-0.5">
-                            <MapPin className="h-2.5 w-2.5" />
+                          <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
                             {incident.location}
                           </span>
                         )}
-                        <span className="text-[10px] text-slate-600 flex items-center gap-0.5">
-                          <Clock className="h-2.5 w-2.5" />
+                        <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
                           {new Date(incident.createdAt).toLocaleTimeString()}
                         </span>
                       </div>
                     </div>
 
-                    <div className="flex flex-col gap-1 shrink-0">
+                    <div className="flex flex-col gap-1.5 shrink-0 pl-2">
                       <Button
                         size="sm"
-                        className="h-6 px-2 text-[10px] bg-blue-600 hover:bg-blue-700"
+                        className="h-7 px-3 text-[11px] font-bold tracking-wide uppercase bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
                         onClick={() => onAlert(incident.id)}
                         data-testid={`alert-btn-${incident.id}`}
                       >
-                        <Phone className="h-2.5 w-2.5 mr-0.5" />
+                        <Phone className="h-3 w-3 mr-1" />
                         Alert
                       </Button>
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-6 px-2 text-[10px] border-slate-700 hover:bg-slate-800"
+                        className="h-7 px-3 text-[11px] font-bold tracking-wide uppercase border-border/80 text-muted-foreground hover:bg-secondary hover:text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
                         onClick={() => onAnalyze(incident.id)}
                         data-testid={`analyze-btn-${incident.id}`}
                       >
-                        <Zap className="h-2.5 w-2.5 mr-0.5" />
+                        <Zap className="h-3 w-3 mr-1" />
                         Analyze
                       </Button>
                     </div>
@@ -950,41 +957,41 @@ function ContactsTable({
   };
 
   return (
-    <div className="h-full flex flex-col" data-testid="contacts-table">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-slate-500">{contacts.length} contacts</span>
+    <div className="h-full flex flex-col px-1" data-testid="contacts-table">
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{contacts.length} contacts</span>
         <Button
           size="sm"
-          className="h-6 px-2 text-[10px] bg-emerald-600 hover:bg-emerald-700"
+          className="h-8 px-3 text-[11px] font-bold uppercase tracking-wide shadow-sm"
           onClick={() => { setIsAdding(true); setEditingId(null); setForm({ name: "", phone: "", email: "", roleSelect: "ems", roleCustom: "", location: "", priority: 1 }); }}
           data-testid="add-contact-btn"
         >
-          <UserPlus className="h-2.5 w-2.5 mr-1" />
-          Add
+          <UserPlus className="h-3 w-3 mr-1.5" />
+          Add Contact
         </Button>
       </div>
 
       {isAdding && (
-        <div className="mb-2 p-2 bg-slate-900/80 rounded border border-slate-700/50 space-y-1.5">
-          <div className="grid grid-cols-2 gap-1.5">
+        <div className="mb-4 p-4 bg-secondary/30 rounded-xl border border-border/80 space-y-3 shadow-xs">
+          <div className="grid grid-cols-2 gap-3">
             <Input
               placeholder="Name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="h-7 text-xs bg-slate-950 border-slate-700"
+              className="h-9 text-xs bg-white border-border shadow-sm focus-visible:ring-primary"
               data-testid="contact-name-input"
             />
             <Input
               placeholder="Phone"
               value={form.phone}
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              className="h-7 text-xs bg-slate-950 border-slate-700"
+              className="h-9 text-xs bg-white border-border shadow-sm focus-visible:ring-primary"
               data-testid="contact-phone-input"
             />
           </div>
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="grid grid-cols-2 gap-3">
             <Select value={form.roleSelect} onValueChange={(v) => setForm({ ...form, roleSelect: v, roleCustom: "" })}>
-              <SelectTrigger className="h-7 text-xs bg-slate-950 border-slate-700" data-testid="contact-role-select">
+              <SelectTrigger className="h-9 text-xs bg-white border-border shadow-sm focus:ring-primary" data-testid="contact-role-select">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -998,7 +1005,7 @@ function ContactsTable({
               placeholder="Email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className="h-7 text-xs bg-slate-950 border-slate-700"
+              className="h-9 text-xs bg-white border-border shadow-sm focus-visible:ring-primary"
               data-testid="contact-email-input"
             />
           </div>
@@ -1007,12 +1014,12 @@ function ContactsTable({
               placeholder="Enter custom role…"
               value={form.roleCustom}
               onChange={(e) => setForm({ ...form, roleCustom: e.target.value })}
-              className="h-7 text-xs bg-slate-950 border-slate-700"
+              className="h-9 text-xs bg-white border-border shadow-sm focus-visible:ring-primary"
               data-testid="contact-role-custom-input"
             />
           )}
           <Select value={form.location} onValueChange={(v) => setForm({ ...form, location: v })}>
-            <SelectTrigger className="h-7 text-xs bg-slate-950 border-slate-700" data-testid="contact-location-select">
+            <SelectTrigger className="h-9 text-xs bg-white border-border shadow-sm focus:ring-primary" data-testid="contact-location-select">
               <SelectValue placeholder="Select location…" />
             </SelectTrigger>
             <SelectContent>
@@ -1021,12 +1028,12 @@ function ContactsTable({
               ))}
             </SelectContent>
           </Select>
-          <div className="flex gap-1.5 justify-end">
-            <Button size="sm" variant="outline" className="h-6 px-2 text-[10px] border-slate-700" onClick={resetForm}>
+          <div className="flex gap-2 justify-end pt-1">
+            <Button size="sm" variant="outline" className="h-8 px-4 text-xs font-bold border-border shadow-sm text-muted-foreground hover:text-foreground" onClick={resetForm}>
               Cancel
             </Button>
-            <Button size="sm" className="h-6 px-2 text-[10px] bg-emerald-600 hover:bg-emerald-700" onClick={handleSave} data-testid="save-contact-btn">
-              <Save className="h-2.5 w-2.5 mr-0.5" />
+            <Button size="sm" className="h-8 px-4 text-xs font-bold shadow-sm" onClick={handleSave} data-testid="save-contact-btn">
+              <Save className="h-3 w-3 mr-1.5" />
               {editingId ? "Update" : "Save"}
             </Button>
           </div>
@@ -1034,55 +1041,57 @@ function ContactsTable({
       )}
 
       <ScrollArea className="flex-1">
-        <div className="space-y-1 pr-2">
+        <div className="space-y-2 pr-4 pb-2">
           {contacts.map((contact) => (
             <div
               key={contact.id}
-              className={`flex items-center gap-2 p-2 rounded border transition-colors ${
-                contact.isActive
-                  ? "bg-slate-900/40 border-slate-700/40 hover:border-slate-600/50"
-                  : "bg-slate-900/20 border-slate-800/30 opacity-50"
-              }`}
+              className={`flex items-center gap-3 p-3 rounded-lg border transition-all duration-200 ${contact.isActive
+                ? "bg-white border-border hover:border-border/80 hover:shadow-sm"
+                : "bg-secondary/30 border-border/50 opacity-60 grayscale-[50%]"
+                }`}
               data-testid={`contact-row-${contact.id}`}
             >
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-medium text-slate-300 truncate">{contact.name}</span>
-                  <Badge variant="outline" className={`text-[9px] px-1 py-0 ${ROLE_COLORS[contact.role] || "bg-slate-700/30 text-slate-400 border-slate-600/30"}`}>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-[13px] font-bold text-foreground truncate font-heading">{contact.name}</span>
+                  <Badge variant="outline" className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0 border-none ${ROLE_COLORS[contact.role] || "bg-secondary text-muted-foreground"}`}>
                     {contact.role.replace(/_/g, " ")}
                   </Badge>
                 </div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-[10px] text-slate-500">{contact.phone}</span>
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+                    <Phone className="h-3 w-3" />
+                    {contact.phone}
+                  </span>
                   {contact.metadata?.location && (
-                    <span className="text-[10px] text-slate-600 flex items-center gap-0.5">
-                      <MapPin className="h-2 w-2" />
+                    <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
                       {contact.metadata.location}
                     </span>
                   )}
-                  <span className="text-[10px] text-slate-600">P{contact.priority}</span>
+                  <span className="text-[11px] font-bold text-muted-foreground bg-secondary px-1.5 py-0.5 rounded-md">P{contact.priority}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-1 shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 <Switch
                   checked={contact.isActive}
                   onCheckedChange={() => onToggle(contact.id)}
-                  className="scale-75"
+                  className="scale-90 data-[state=checked]:bg-primary mr-1"
                   data-testid={`toggle-contact-${contact.id}`}
                 />
                 <button
-                  className="p-1 rounded hover:bg-slate-800 transition-colors"
+                  className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
                   onClick={() => startEdit(contact)}
                   data-testid={`edit-contact-${contact.id}`}
                 >
-                  <Edit className="h-3 w-3 text-slate-500 hover:text-slate-300" />
+                  <Edit className="h-3.5 w-3.5" />
                 </button>
                 <button
-                  className="p-1 rounded hover:bg-slate-800 transition-colors"
+                  className="p-1.5 rounded-md hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors"
                   onClick={() => onDelete(contact.id)}
                   data-testid={`delete-contact-${contact.id}`}
                 >
-                  <Trash2 className="h-3 w-3 text-slate-600 hover:text-red-400" />
+                  <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
@@ -1141,50 +1150,50 @@ function RobocallerConsole({ robocalls, incidents }: { robocalls: Robocall[]; in
   };
 
   return (
-    <div className="h-full flex flex-col bg-slate-950 rounded-lg border border-slate-700/50 overflow-hidden" data-testid="robocaller-console">
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/80 border-b border-slate-700/50">
-        <Terminal className="h-3.5 w-3.5 text-green-400" />
-        <span className="text-[11px] font-mono text-green-400">robocaller@emergency</span>
+    <div className="h-full flex flex-col bg-[#0F0F0F] rounded-xl border border-border/80 overflow-hidden shadow-inner" data-testid="robocaller-console">
+      <div className="flex items-center gap-2 px-3 py-2 bg-[#1A1A1A] border-b border-[#2A2A2A]">
+        <Terminal className="h-3.5 w-3.5 text-green-500" />
+        <span className="text-[11px] font-mono font-bold text-green-500">robocaller@emergency</span>
         <div className="flex-1" />
-        <span className="text-[10px] text-slate-600">{robocalls.length} calls</span>
+        <span className="text-[10px] text-muted-foreground font-medium">{robocalls.length} calls</span>
       </div>
 
       <div ref={consoleRef} className="flex-1 overflow-y-auto p-2 font-mono text-[11px] space-y-1">
         <div className="text-green-500/60">{'>'} Robocaller console ready. Type "help" for commands.</div>
-        <div className="text-slate-600">{'>'} Connected to emergency notification system.</div>
+        <div className="text-muted-foreground">{'>'} Connected to emergency notification system.</div>
 
         {robocalls.slice(-20).map((call) => (
           <div key={call.id} className="flex items-start gap-1.5">
             {getStatusIcon(call.status)}
-            <span className="text-slate-500">[{new Date(call.createdAt).toLocaleTimeString()}]</span>
+            <span className="text-muted-foreground">[{new Date(call.createdAt).toLocaleTimeString()}]</span>
             <span className={
               call.status === "completed" ? "text-green-400" :
-              call.status === "failed" ? "text-red-400" :
-              call.status === "calling" ? "text-blue-400" :
-              "text-yellow-400"
+                call.status === "failed" ? "text-red-400" :
+                  call.status === "calling" ? "text-blue-400" :
+                    "text-yellow-400"
             }>
               {call.status.toUpperCase()}
             </span>
-            <span className="text-slate-400 truncate">
+            <span className="text-muted-foreground truncate">
               Contact#{call.contactId} - {call.message.slice(0, 40)}{call.message.length > 40 ? "..." : ""}
             </span>
           </div>
         ))}
 
         {robocalls.length === 0 && (
-          <div className="text-slate-600">{'>'} No call activity yet. Use "alert {'<incident_id>'}" to start.</div>
+          <div className="text-muted-foreground">{'>'} No call activity yet. Use "alert {'<incident_id>'}" to start.</div>
         )}
       </div>
 
-      <div className="flex items-center border-t border-slate-700/50 bg-slate-900/50">
-        <span className="text-green-400 text-xs pl-2 font-mono">$</span>
+      <div className="flex items-center border-t border-[#2A2A2A] bg-[#141414]">
+        <span className="text-green-500 text-xs pl-3 font-mono font-bold">$</span>
         <input
           type="text"
           value={commandInput}
           onChange={(e) => setCommandInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") handleCommand(commandInput); }}
           placeholder="Type command..."
-          className="flex-1 bg-transparent text-xs font-mono text-slate-300 px-2 py-2 focus:outline-none placeholder:text-slate-700"
+          className="flex-1 bg-transparent text-xs font-mono text-gray-300 px-3 py-2.5 focus:outline-none placeholder:text-gray-600"
           data-testid="console-input"
         />
       </div>
@@ -1250,10 +1259,10 @@ export default function Dashboard() {
         if (message.event?.includes("risk")) {
           queryClient.invalidateQueries({ queryKey: ["/api/modules/risk-analysis"] });
         }
-      } catch {}
+      } catch { }
     };
 
-    websocket.onerror = () => {};
+    websocket.onerror = () => { };
     websocket.onclose = () => {
       setTimeout(() => {
         queryClient.invalidateQueries();
@@ -1298,7 +1307,7 @@ export default function Dashboard() {
           apiRequest("POST", "/api/modules/camera-processing/feeds", { name: "Camera 4", location: "Unassigned" }),
         ]);
         queryClient.invalidateQueries({ queryKey: ["/api/modules/camera-processing/feeds"] });
-      } catch {}
+      } catch { }
     };
     seed();
   }, [cameraFeedsFetched]);
@@ -1377,7 +1386,7 @@ export default function Dashboard() {
       try {
         await apiRequest("PATCH", `/api/modules/contact-management/${id}/toggle`);
         queryClient.invalidateQueries({ queryKey: ["/api/modules/contact-management"] });
-      } catch {}
+      } catch { }
     },
     []
   );
@@ -1437,7 +1446,7 @@ export default function Dashboard() {
 
   const getHealthIcon = (name: string) => {
     const m = moduleHealth.find((h) => h.moduleName === name);
-    if (!m) return <Activity className="h-3 w-3 text-slate-600" />;
+    if (!m) return <Activity className="h-3 w-3 text-muted-foreground" />;
     if (m.status === "healthy") return <CheckCircle2 className="h-3 w-3 text-green-500" />;
     if (m.status === "degraded") return <AlertTriangle className="h-3 w-3 text-yellow-500" />;
     return <XCircle className="h-3 w-3 text-red-500" />;
@@ -1447,29 +1456,30 @@ export default function Dashboard() {
   const MaxBtn = ({ panel }: { panel: string }) => (
     <button
       onClick={() => setMaximizedPanel(panel)}
-      className="ml-1 p-0.5 rounded hover:bg-slate-700/50 transition-colors text-slate-600 hover:text-slate-400"
+      className="ml-1 p-0.5 rounded-md hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
       title="Maximize"
+      data-testid={`maximize-${panel}`}
     >
-      <Maximize2 className="h-3 w-3" />
+      <Maximize2 className="h-3.5 w-3.5" />
     </button>
   );
 
   return (
-    <div className="h-screen flex flex-col bg-slate-950 text-slate-200 overflow-hidden dark">
+    <div className="h-screen flex flex-col bg-background text-foreground overflow-hidden font-sans">
       {/* Maximized Panel Overlay */}
       {maximizedPanel && (
-        <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col">
-          <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-slate-800">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+        <div className="fixed inset-0 z-50 bg-background flex flex-col">
+          <div className="shrink-0 flex items-center justify-between px-4 py-3 bg-white border-b border-border shadow-xs">
+            <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2 font-heading">
               {maximizedPanel === "map" && <><MapPin className="h-3.5 w-3.5" /> Incident Map</>}
-              {maximizedPanel === "incidents" && <><Activity className="h-3.5 w-3.5 text-red-400" /> Live Incident Feed</>}
+              {maximizedPanel === "incidents" && <><Activity className="h-3.5 w-3.5 text-red-500" /> Live Incident Feed</>}
               {maximizedPanel === "contacts" && <><Users className="h-3.5 w-3.5" /> Contact Directory</>}
-              {maximizedPanel === "robocaller" && <><Phone className="h-3.5 w-3.5 text-green-400" /> Robocaller Console</>}
+              {maximizedPanel === "robocaller" && <><Phone className="h-3.5 w-3.5 text-primary" /> Robocaller Console</>}
               {maximizedPanel === "cameras" && <><Camera className="h-3.5 w-3.5" /> Camera Feeds</>}
             </span>
             <button
               onClick={() => setMaximizedPanel(null)}
-              className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-200 transition-colors px-2 py-1 rounded hover:bg-slate-800"
+              className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors px-2 py-1.5 rounded-md hover:bg-secondary"
             >
               <Minimize2 className="h-3.5 w-3.5" />
               Minimize
@@ -1483,7 +1493,7 @@ export default function Dashboard() {
                   <div className="shrink-0 flex justify-end mb-2">
                     <button
                       onClick={clearAllIncidents}
-                      className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-red-400 transition-colors"
+                      className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive transition-colors"
                     >
                       <Trash2 className="h-3 w-3" />
                       Clear all
@@ -1522,27 +1532,29 @@ export default function Dashboard() {
       )}
 
       {/* Header Bar */}
-      <header className="shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-slate-800">
+      <header className="shrink-0 flex items-center justify-between px-6 py-3 bg-white border-b border-border shadow-xs z-10">
         <div className="flex items-center gap-3">
-          <Shield className="h-6 w-6 text-red-500" />
+          <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+            <Shield className="h-5 w-5 text-primary" />
+          </div>
           <div>
-            <h1 className="text-sm font-bold tracking-tight" data-testid="dashboard-title">INCIDENT RESPONSE CENTER</h1>
-            <p className="text-[10px] text-slate-500">Real-time monitoring & coordination</p>
+            <h1 className="text-sm font-bold tracking-tight text-primary uppercase font-heading" data-testid="dashboard-title">INCIDENT RESPONSE CENTER</h1>
+            <p className="text-[10px] font-medium lowercase tracking-wide text-muted-foreground">Real-time monitoring & coordination</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-5">
           {/* Module health indicators */}
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-4 border-r border-border pr-5">
             {[
               { key: "robocaller", label: "Robocaller" },
               { key: "risk_analysis", label: "Risk" },
               { key: "camera_processing", label: "Camera" },
               { key: "contact_management", label: "Contacts" },
             ].map((mod) => (
-              <div key={mod.key} className="flex items-center gap-1" data-testid={`health-${mod.key}`}>
+              <div key={mod.key} className="flex items-center gap-1.5" data-testid={`health-${mod.key}`}>
                 {getHealthIcon(mod.key)}
-                <span className="text-[10px] text-slate-500">{mod.label}</span>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase opacity-80">{mod.label}</span>
               </div>
             ))}
           </div>
@@ -1550,11 +1562,11 @@ export default function Dashboard() {
           {/* Stats badges */}
           <div className="flex items-center gap-2">
             {criticalCount > 0 && (
-              <Badge className="bg-red-600 text-white text-[10px] px-1.5 py-0 animate-pulse-status" data-testid="critical-badge">
+              <Badge className="bg-destructive text-destructive-foreground text-[10px] px-2 py-0.5 animate-pulse-status rounded-md shadow-sm font-bold tracking-wider border-none" data-testid="critical-badge">
                 {criticalCount} CRITICAL
               </Badge>
             )}
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-slate-700 text-slate-400" data-testid="active-count-badge">
+            <Badge variant="outline" className="text-[10px] px-2 py-0.5 border-border bg-secondary text-muted-foreground font-bold tracking-wider rounded-md" data-testid="active-count-badge">
               {activeIncidents.length} Active
             </Badge>
           </div>
@@ -1562,70 +1574,70 @@ export default function Dashboard() {
       </header>
 
       {/* Main Grid */}
-      <main className="flex-1 grid grid-rows-[auto_1fr_1fr] gap-3 p-3 overflow-hidden min-h-0">
+      <main className="flex-1 grid grid-rows-[auto_1fr_1fr] gap-4 p-4 lg:p-6 lg:gap-6 overflow-hidden min-h-0 bg-background">
         {/* Row 1: Camera Feeds */}
-        <section>
-          <div className="flex items-center gap-2 mb-2">
-            <Camera className="h-4 w-4 text-slate-500" />
-            <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Camera Feeds</h2>
-            <span className="text-[10px] text-slate-600">{cameraFeeds.filter((f) => f.isActive).length} active</span>
+        <section className="staggered-fade-in delay-100">
+          <div className="flex items-center gap-2 mb-3">
+            <Camera className="h-3.5 w-3.5 text-muted-foreground" />
+            <h2 className="saas-section-label mb-0">Camera Feeds</h2>
+            <span className="text-[10px] font-medium text-muted-foreground bg-secondary px-1.5 py-0.5 rounded-md ml-1">{cameraFeeds.filter((f) => f.isActive).length} active</span>
             <MaxBtn panel="cameras" />
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
             {displayFeeds.length === 0
               ? Array.from({ length: 4 }).map((_, i) => (
-                  <Card key={i} className="bg-slate-900/80 border-slate-700/50 overflow-hidden">
-                    <div className="aspect-video bg-slate-950 flex items-center justify-center">
-                      <Loader2 className="h-6 w-6 text-slate-700 animate-spin" />
-                    </div>
-                    <div className="p-3">
-                      <div className="h-3 w-20 bg-slate-800 rounded animate-pulse" />
-                    </div>
-                  </Card>
-                ))
+                <Card key={i} className="saas-card bg-white border border-border/50 overflow-hidden">
+                  <div className="aspect-video bg-secondary/30 flex items-center justify-center">
+                    <Loader2 className="h-6 w-6 text-muted-foreground/30 animate-spin" />
+                  </div>
+                  <div className="p-4 bg-white">
+                    <div className="h-3 w-20 bg-secondary rounded animate-pulse" />
+                  </div>
+                </Card>
+              ))
               : displayFeeds.map((feed) => (
-                  <CameraFeedCard
-                    key={feed.id}
-                    feed={feed}
-                    onVideoUploaded={() => queryClient.invalidateQueries({ queryKey: ["/api/modules/camera-processing/feeds"] })}
-                    onIncidentCreated={() => queryClient.invalidateQueries({ queryKey: ["/api/incidents"] })}
-                  />
-                ))}
+                <CameraFeedCard
+                  key={feed.id}
+                  feed={feed}
+                  onVideoUploaded={() => queryClient.invalidateQueries({ queryKey: ["/api/modules/camera-processing/feeds"] })}
+                  onIncidentCreated={() => queryClient.invalidateQueries({ queryKey: ["/api/incidents"] })}
+                />
+              ))}
           </div>
         </section>
 
         {/* Row 2: Map + Incident Feed */}
-        <section className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-3 min-h-0">
-          <Card className="bg-slate-900/50 border-slate-800 overflow-hidden">
-            <CardHeader className="py-2 px-3">
+        <section className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-4 lg:gap-6 min-h-0 staggered-fade-in delay-200">
+          <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
+            <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-white/50">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <MapPin className="h-3.5 w-3.5" />
+                <CardTitle className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2 font-heading">
+                  <MapPin className="h-3.5 w-3.5 text-primary" />
                   Incident Map
                 </CardTitle>
                 <MaxBtn panel="map" />
               </div>
             </CardHeader>
-            <CardContent className="p-2 h-[calc(100%-40px)]">
+            <CardContent className="p-0 h-[calc(100%-48px)] flex-1">
               <IncidentMap incidents={incidents} />
             </CardContent>
           </Card>
 
-          <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col">
-            <CardHeader className="py-2 px-3 shrink-0">
+          <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
+            <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-white/50">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <Activity className="h-3.5 w-3.5 text-red-400" />
+                <CardTitle className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2 font-heading">
+                  <Activity className="h-3.5 w-3.5 text-destructive" />
                   Live Incident Feed
                   {activeIncidents.length > 0 && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse-status" />
+                    <span className="h-2 w-2 rounded-full bg-destructive animate-pulse-status" />
                   )}
                 </CardTitle>
                 <div className="flex items-center gap-2">
                   {activeIncidents.length > 0 && (
                     <button
                       onClick={clearAllIncidents}
-                      className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-red-400 transition-colors"
+                      className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-destructive transition-colors px-2 py-1 rounded-md hover:bg-secondary/50"
                       data-testid="clear-incidents-btn"
                     >
                       <Trash2 className="h-3 w-3" />
@@ -1636,7 +1648,7 @@ export default function Dashboard() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="p-2 flex-1 min-h-0">
+            <CardContent className="p-3 flex-1 min-h-0 bg-secondary/20">
               <LiveIncidentFeed
                 incidents={activeIncidents}
                 onAlert={initiateRobocalls}
@@ -1647,18 +1659,18 @@ export default function Dashboard() {
         </section>
 
         {/* Row 3: Contacts + Robocaller Console */}
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-3 min-h-0">
-          <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col">
-            <CardHeader className="py-2 px-3 shrink-0">
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 min-h-0 staggered-fade-in delay-300">
+          <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
+            <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-white/50">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <Users className="h-3.5 w-3.5" />
+                <CardTitle className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2 font-heading">
+                  <Users className="h-3.5 w-3.5 text-primary" />
                   Contact Directory
                 </CardTitle>
                 <MaxBtn panel="contacts" />
               </div>
             </CardHeader>
-            <CardContent className="p-2 flex-1 min-h-0">
+            <CardContent className="p-0 flex-1 min-h-0">
               <ContactsTable
                 contacts={contacts}
                 onAdd={createContact}
@@ -1669,17 +1681,17 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col">
-            <CardHeader className="py-2 px-3 shrink-0">
+          <Card className="saas-card flex flex-col h-full bg-card overflow-hidden">
+            <CardHeader className="py-3 px-4 shrink-0 border-b border-border/50 bg-white/50">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <Phone className="h-3.5 w-3.5 text-green-400" />
+                <CardTitle className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2 font-heading">
+                  <Terminal className="h-3.5 w-3.5 text-green-500" />
                   Robocaller Console
                 </CardTitle>
                 <MaxBtn panel="robocaller" />
               </div>
             </CardHeader>
-            <CardContent className="p-2 flex-1 min-h-0">
+            <CardContent className="p-4 flex-1 min-h-0 bg-secondary/10">
               <RobocallerConsole robocalls={robocalls} incidents={incidents} />
             </CardContent>
           </Card>

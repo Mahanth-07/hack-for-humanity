@@ -2,63 +2,84 @@
 @tailwind components;
 @tailwind utilities;
 
-/* LIGHT MODE */
+/* LIGHT MODE SAAS DASHBOARD */
 :root {
-  --button-outline: rgba(0,0,0, .10);
-  --badge-outline: rgba(0,0,0, .05);
+  --button-outline: rgba(0, 0, 0, .10);
+  --badge-outline: rgba(0, 0, 0, .05);
 
   --opaque-button-border-intensity: -8;
 
-  --elevate-1: rgba(0,0,0, .03);
-  --elevate-2: rgba(0,0,0, .08);
+  --elevate-1: rgba(0, 0, 0, .03);
+  --elevate-2: rgba(0, 0, 0, .08);
 
-  --background: 220 20% 97%;
-  --foreground: 220 20% 10%;
-  --border: 220 15% 88%;
+  /* Layout and structural colors */
+  --background: 40 14% 95%;
+  /* Warm off-white #F5F4F2 */
+  --foreground: 0 0% 24%;
+  /* Body #3D3D3D */
+  --border: 45 11% 90%;
+  /* Soft warm separator #E8E6E1 */
   --card: 0 0% 100%;
-  --card-foreground: 220 20% 10%;
-  --card-border: 220 15% 90%;
-  --sidebar: 220 18% 95%;
-  --sidebar-foreground: 220 20% 15%;
-  --sidebar-border: 220 15% 88%;
-  --sidebar-primary: 0 72% 51%;
+  /* Pure white #FFFFFF */
+  --card-foreground: 0 0% 6%;
+  /* Headings #0F0F0F */
+  --card-border: 45 11% 90%;
+  /* Same as border */
+
+  /* Sidebar colors */
+  --sidebar: 40 14% 95%;
+  --sidebar-foreground: 0 0% 24%;
+  --sidebar-border: 45 11% 90%;
+  --sidebar-primary: 219 48% 20%;
+  /* Slate-blue primary #1A2B4A */
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 220 15% 92%;
-  --sidebar-accent-foreground: 220 20% 15%;
-  --sidebar-ring: 0 72% 51%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 220 20% 10%;
-  --popover-border: 220 15% 88%;
-  --primary: 0 72% 51%;
+  --sidebar-accent: 40 10% 90%;
+  --sidebar-accent-foreground: 0 0% 6%;
+  --sidebar-ring: 219 48% 20%;
+
+  /* Core interactive colors */
+  --primary: 219 48% 20%;
+  /* Slate-blue #1A2B4A */
   --primary-foreground: 0 0% 100%;
-  --secondary: 220 15% 93%;
-  --secondary-foreground: 220 20% 15%;
-  --muted: 220 15% 93%;
-  --muted-foreground: 220 12% 45%;
-  --accent: 220 15% 93%;
-  --accent-foreground: 220 20% 15%;
+  --secondary: 40 10% 92%;
+  --secondary-foreground: 0 0% 6%;
+  --muted: 0 0% 96%;
+  --muted-foreground: 30 2% 53%;
+  /* Muted secondary #8A8784 */
+  --accent: 40 10% 92%;
+  --accent-foreground: 0 0% 6%;
+
+  /* Status/Feedback colors - Refined */
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 24%;
+  --popover-border: 45 11% 90%;
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
-  --input: 220 15% 85%;
-  --ring: 0 72% 51%;
-  --chart-1: 0 72% 51%;
+  --input: 45 11% 85%;
+  --ring: 219 48% 20%;
+  --chart-1: 219 48% 40%;
   --chart-2: 25 95% 53%;
   --chart-3: 45 93% 47%;
   --chart-4: 199 89% 48%;
   --chart-5: 142 71% 45%;
 
-  --font-sans: 'Inter', sans-serif;
-  --font-serif: Georgia, serif;
+  /* Typography */
+  --font-sans: 'DM Sans', sans-serif;
+  --font-heading: 'Outfit', sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', Menlo, monospace;
-  --radius: .5rem;
-  --shadow-2xs: 0px 1px 2px 0px hsl(220 20% 10% / 0.04);
-  --shadow-xs: 0px 1px 3px 0px hsl(220 20% 10% / 0.06);
-  --shadow-sm: 0px 1px 3px 0px hsl(220 20% 10% / 0.06), 0px 1px 2px -1px hsl(220 20% 10% / 0.06);
-  --shadow: 0px 2px 4px 0px hsl(220 20% 10% / 0.06), 0px 1px 2px -1px hsl(220 20% 10% / 0.06);
-  --shadow-md: 0px 4px 6px 0px hsl(220 20% 10% / 0.07), 0px 2px 4px -1px hsl(220 20% 10% / 0.07);
-  --shadow-lg: 0px 8px 15px 0px hsl(220 20% 10% / 0.08), 0px 4px 6px -1px hsl(220 20% 10% / 0.08);
-  --shadow-xl: 0px 16px 30px 0px hsl(220 20% 10% / 0.10), 0px 8px 10px -1px hsl(220 20% 10% / 0.10);
-  --shadow-2xl: 0px 24px 50px 0px hsl(220 20% 10% / 0.15);
+
+  /* Shared structural */
+  --radius: 0.75rem;
+  /* 12px for cards */
+  --border-radius-card: 12px;
+
+  /* Refined Shadows */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.02);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.05), 0 8px 24px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 12px 32px rgba(0, 0, 0, 0.08);
+
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 
@@ -78,60 +99,6 @@
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
-.dark {
-  --button-outline: rgba(255,255,255, .10);
-  --badge-outline: rgba(255,255,255, .05);
-
-  --opaque-button-border-intensity: 9;
-
-  --elevate-1: rgba(255,255,255, .04);
-  --elevate-2: rgba(255,255,255, .09);
-
-  --background: 222 47% 6%;
-  --foreground: 210 20% 92%;
-  --border: 217 33% 15%;
-  --card: 222 44% 8%;
-  --card-foreground: 210 20% 92%;
-  --card-border: 217 33% 15%;
-  --sidebar: 222 47% 5%;
-  --sidebar-foreground: 210 20% 85%;
-  --sidebar-border: 217 33% 15%;
-  --sidebar-primary: 0 72% 51%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 217 33% 12%;
-  --sidebar-accent-foreground: 210 20% 85%;
-  --sidebar-ring: 0 72% 51%;
-  --popover: 222 44% 9%;
-  --popover-foreground: 210 20% 92%;
-  --popover-border: 217 33% 15%;
-  --primary: 0 72% 51%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 217 33% 14%;
-  --secondary-foreground: 210 20% 85%;
-  --muted: 217 33% 14%;
-  --muted-foreground: 215 20% 55%;
-  --accent: 217 33% 14%;
-  --accent-foreground: 210 20% 85%;
-  --destructive: 0 63% 45%;
-  --destructive-foreground: 0 0% 100%;
-  --input: 217 33% 20%;
-  --ring: 0 72% 51%;
-  --chart-1: 0 72% 51%;
-  --chart-2: 25 95% 53%;
-  --chart-3: 45 93% 47%;
-  --chart-4: 199 89% 48%;
-  --chart-5: 142 71% 45%;
-
-  --shadow-2xs: 0px 1px 2px 0px hsl(0 0% 0% / 0.3);
-  --shadow-xs: 0px 1px 3px 0px hsl(0 0% 0% / 0.4);
-  --shadow-sm: 0px 1px 3px 0px hsl(0 0% 0% / 0.4), 0px 1px 2px -1px hsl(0 0% 0% / 0.4);
-  --shadow: 0px 2px 4px 0px hsl(0 0% 0% / 0.4), 0px 1px 2px -1px hsl(0 0% 0% / 0.4);
-  --shadow-md: 0px 4px 6px 0px hsl(0 0% 0% / 0.45), 0px 2px 4px -1px hsl(0 0% 0% / 0.45);
-  --shadow-lg: 0px 8px 15px 0px hsl(0 0% 0% / 0.5), 0px 4px 6px -1px hsl(0 0% 0% / 0.5);
-  --shadow-xl: 0px 16px 30px 0px hsl(0 0% 0% / 0.55), 0px 8px 10px -1px hsl(0 0% 0% / 0.55);
-  --shadow-2xl: 0px 24px 50px 0px hsl(0 0% 0% / 0.6);
-}
-
 @layer base {
   * {
     @apply border-border;
@@ -139,6 +106,16 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-heading);
+    @apply text-card-foreground font-semibold tracking-tight;
   }
 }
 
@@ -154,6 +131,7 @@
   }
 
   .no-default-hover-elevate {}
+
   .no-default-active-elevate {}
 
   .toggle-elevate::before,
@@ -213,8 +191,15 @@
   }
 
   @keyframes pulse-status {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.4;
+    }
   }
 
   .animate-pulse-status {
@@ -222,11 +207,66 @@
   }
 
   @keyframes scan-line {
-    0% { transform: translateY(-100%); }
-    100% { transform: translateY(100%); }
+    0% {
+      transform: translateY(-100%);
+    }
+
+    100% {
+      transform: translateY(100%);
+    }
   }
 
   .animate-scan {
     animation: scan-line 3s linear infinite;
+  }
+
+  /* Custom SaaS Utilities & Animations */
+  .saas-card {
+    @apply bg-card border-none rounded-xl shadow-sm transition-all duration-300;
+  }
+
+  .saas-card-hover {
+    @apply hover:-translate-y-[2px] hover:shadow-md;
+  }
+
+  .saas-section-label {
+    @apply text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4;
+  }
+
+  .staggered-fade-in {
+    opacity: 0;
+    animation: fadeSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes fadeSlideUp {
+    0% {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .delay-100 {
+    animation-delay: 100ms;
+  }
+
+  .delay-200 {
+    animation-delay: 200ms;
+  }
+
+  .delay-300 {
+    animation-delay: 300ms;
+  }
+
+  .delay-400 {
+    animation-delay: 400ms;
+  }
+
+  .delay-500 {
+    animation-delay: 500ms;
   }
 }

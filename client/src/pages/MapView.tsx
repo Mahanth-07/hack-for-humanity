@@ -1,8 +1,11 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  ArrowLeft,
   Camera,
   AlertTriangle,
   X,
@@ -58,18 +61,19 @@ function SeverityBadge({ severity }: { severity: string }) {
 }
 
 function computePathBBox(d: string): { x: number; y: number; width: number; height: number } {
+  const nums: number[] = [];
   const matches = d.match(/[-+]?\d*\.?\d+/g);
   if (!matches) return { x: 0, y: 0, width: 975, height: 610 };
-  const xs: number[] = [];
-  const ys: number[] = [];
   for (let i = 0; i < matches.length - 1; i += 2) {
-    xs.push(parseFloat(matches[i]));
-    ys.push(parseFloat(matches[i + 1]));
+    nums.push(parseFloat(matches[i]), parseFloat(matches[i + 1]));
   }
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (let i = 0; i < nums.length - 1; i += 2) {
+    if (nums[i] < minX) minX = nums[i];
+    if (nums[i] > maxX) maxX = nums[i];
+    if (nums[i + 1] < minY) minY = nums[i + 1];
+    if (nums[i + 1] > maxY) maxY = nums[i + 1];
+  }
   const pad = 20;
   return { x: minX - pad, y: minY - pad, width: maxX - minX + pad * 2, height: maxY - minY + pad * 2 };
 }
@@ -102,34 +106,27 @@ function StateDetailPanel({
 
   const pinScale = Math.max(1, Math.min(bbox.width, bbox.height) / 120);
   const panelRef = useRef<HTMLDivElement>(null);
-  const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (panelRef.current) {
       panelRef.current.setAttribute("enable-xr", "");
-      panelRef.current.style.setProperty("--xr-back", "150px");
-      panelRef.current.style.setProperty("--xr-background-material", "glass.thick");
-    }
-    if (overlayRef.current) {
-      overlayRef.current.setAttribute("enable-xr", "");
-      overlayRef.current.style.setProperty("--xr-back", "50px");
+      panelRef.current.style.setProperty("--xr-back", "80px");
+      panelRef.current.style.setProperty("--xr-background-material", "thick");
     }
   }, []);
 
   return (
     <div
-      ref={overlayRef}
-      className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm state-detail-overlay"
+      className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={onClose}
       data-testid="state-detail-overlay"
     >
       <div
         ref={panelRef}
-        className="relative w-[90%] max-w-4xl rounded-2xl shadow-2xl overflow-hidden state-detail-panel"
+        className="relative w-[90%] max-w-4xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
-        data-testid="state-detail-panel"
       >
-        <div className="flex items-center justify-between p-4 border-b border-white/10">
+        <div className="flex items-center justify-between p-4 border-b border-slate-700">
           <div className="flex items-center gap-3">
             <Shield className="h-5 w-5 text-red-500" />
             <h2 className="text-lg font-bold text-white" data-testid="state-detail-title">{stateName}</h2>
@@ -140,22 +137,24 @@ function StateDetailPanel({
               {stateIncidents.length} incidents
             </Badge>
           </div>
-          <button
+          <Button
+            size="sm"
+            variant="ghost"
             onClick={onClose}
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="text-slate-400 hover:text-white"
             data-testid="close-state-detail"
           >
             <X className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
 
         <div className="grid grid-cols-2 gap-0 h-[500px]">
-          <div className="border-r border-white/10 p-4 flex items-center justify-center">
+          <div className="border-r border-slate-700 p-4 flex items-center justify-center">
             <svg viewBox={`${bbox.x} ${bbox.y} ${bbox.width} ${bbox.height}`} className="w-full h-full" style={{ maxHeight: "460px" }}>
               <path
                 d={statePath}
                 fill="rgba(30, 41, 59, 0.8)"
-                stroke="rgba(100, 200, 255, 0.3)"
+                stroke="rgba(100, 116, 139, 0.6)"
                 strokeWidth={Math.max(0.5, pinScale * 0.5)}
                 className="drop-shadow-lg"
               />
@@ -205,7 +204,7 @@ function StateDetailPanel({
                   {stateIncidents.map((inc) => (
                     <div
                       key={inc.id}
-                      className="p-2.5 bg-white/5 rounded-lg border border-white/10"
+                      className="p-2.5 bg-slate-800/60 rounded-lg border border-slate-700/50"
                       data-testid={`state-incident-${inc.id}`}
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -231,7 +230,7 @@ function StateDetailPanel({
               {stateCameras.map((cam) => (
                 <div
                   key={cam.id}
-                  className="p-2.5 bg-white/5 rounded-lg border border-white/5"
+                  className="p-2.5 bg-slate-800/40 rounded-lg border border-slate-700/30"
                   data-testid={`state-camera-${cam.id}`}
                 >
                   <div className="flex items-center gap-2">
@@ -333,9 +332,18 @@ export default function MapView() {
   return (
     <div className="h-screen w-screen bg-slate-950 flex flex-col overflow-hidden" data-testid="map-view">
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-900/80 backdrop-blur-sm">
-        <div className="flex items-center gap-2">
-          <Activity className="h-4 w-4 text-red-500" />
-          <span className="text-sm font-semibold text-white tracking-wide" data-testid="map-title">INCIDENT MAP</span>
+        <div className="flex items-center gap-3">
+          <Link href="/">
+            <Button size="sm" variant="ghost" className="text-slate-400 hover:text-white h-8" data-testid="back-to-dashboard">
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              Dashboard
+            </Button>
+          </Link>
+          <div className="h-5 w-px bg-slate-700" />
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4 text-red-500" />
+            <span className="text-sm font-semibold text-white tracking-wide">INCIDENT MAP</span>
+          </div>
         </div>
 
         <div className="flex items-center gap-4" data-testid="map-legend">
@@ -351,7 +359,7 @@ export default function MapView() {
           </div>
           <div className="flex items-center gap-1">
             {["critical", "high", "medium", "low"].map((s) => (
-              <div key={s} className="flex items-center gap-1 ml-2" data-testid={`legend-severity-${s}`}>
+              <div key={s} className="flex items-center gap-1 ml-2">
                 <div className="h-2 w-2 rounded-full" style={{ backgroundColor: SEVERITY_COLORS[s] }} />
                 <span className="text-[9px] text-slate-500 capitalize">{s}</span>
               </div>
@@ -441,7 +449,15 @@ export default function MapView() {
                 data-testid={`map-camera-pin-${cam.id}`}
               >
                 <circle cx={pos.x} cy={pos.y} r="6" fill="rgba(148, 163, 184, 0.15)" stroke="none" />
-                <circle cx={pos.x} cy={pos.y} r="3.5" fill="#94a3b8" stroke="#334155" strokeWidth="1" filter="url(#glow-gray)" />
+                <circle
+                  cx={pos.x}
+                  cy={pos.y}
+                  r="3.5"
+                  fill="#94a3b8"
+                  stroke="#334155"
+                  strokeWidth="1"
+                  filter="url(#glow-gray)"
+                />
               </g>
             );
           })}
@@ -463,7 +479,15 @@ export default function MapView() {
                   <animate attributeName="r" values="6;12;6" dur="2.5s" repeatCount="indefinite" />
                   <animate attributeName="opacity" values="0.8;0.2;0.8" dur="2.5s" repeatCount="indefinite" />
                 </circle>
-                <circle cx={pos.x} cy={pos.y} r="4" fill={color} stroke="white" strokeWidth="1.5" filter="url(#glow-red)" />
+                <circle
+                  cx={pos.x}
+                  cy={pos.y}
+                  r="4"
+                  fill={color}
+                  stroke="white"
+                  strokeWidth="1.5"
+                  filter="url(#glow-red)"
+                />
               </g>
             );
           })}
@@ -480,7 +504,14 @@ export default function MapView() {
                 stroke="rgba(100, 116, 139, 0.4)"
                 strokeWidth="1"
               />
-              <text x={hoveredPin.x + 18} y={hoveredPin.y - 13} fill="white" fontSize="10" fontFamily="monospace" fontWeight="bold">
+              <text
+                x={hoveredPin.x + 18}
+                y={hoveredPin.y - 13}
+                fill="white"
+                fontSize="10"
+                fontFamily="monospace"
+                fontWeight="bold"
+              >
                 {tooltipInfo.title.length > 30 ? tooltipInfo.title.slice(0, 30) + "..." : tooltipInfo.title}
               </text>
               <text
@@ -532,13 +563,13 @@ export default function MapView() {
 
       <div className="px-4 py-2 border-t border-slate-800 bg-slate-900/80 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <span className="text-[10px] text-slate-500 font-mono" data-testid="stat-cameras">
+          <span className="text-[10px] text-slate-500 font-mono">
             TOTAL CAMERAS: {activeCameras.length}
           </span>
-          <span className="text-[10px] text-red-500 font-mono" data-testid="stat-incidents">
+          <span className="text-[10px] text-red-500 font-mono">
             ACTIVE INCIDENTS: {activeIncidents.length}
           </span>
-          <span className="text-[10px] text-slate-600 font-mono" data-testid="stat-states">
+          <span className="text-[10px] text-slate-600 font-mono">
             STATES WITH ACTIVITY: {Object.keys(stateStats).length}
           </span>
         </div>

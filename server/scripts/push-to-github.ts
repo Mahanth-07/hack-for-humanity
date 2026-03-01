@@ -167,7 +167,7 @@ async function main() {
 
   const { data: commit } = await octokit.git.createCommit({
     owner, repo,
-    message: 'WebSpatial US Incident Map - Interactive 3D Map\n\nFeatures:\n- Full SVG US map (51 states) from TopoJSON with Albers USA projection\n- Gray camera feed pins and red severity-coded incident pins\n- WebSpatial 3D state pop-out with glass.thick material on visionOS\n- Zoomed state detail panel with labeled pins and incident list\n- Hover tooltips and state activity indicators\n- Dark command-center theme\n- 20 camera feeds and 10 incidents seeded across US states\n- Live data from PostgreSQL via API',
+    message: 'AI Incident Response Command Center - Full Dashboard + WebSpatial Map\n\nFeatures:\n- 4 camera feed cards with MP4 drag-and-drop upload and video preview\n- Interactive SVG US map with gray camera pins and red severity-coded incident pins\n- WebSpatial 3D state pop-out on click (with 2D overlay fallback)\n- Live incident feed panel with real-time WebSocket updates\n- Contact database with full CRUD operations\n- Robocaller console terminal\n- Dark command-center theme\n- 20 camera feeds and 10 incidents seeded across US states',
     tree: tree.sha,
     parents: [latestCommitSha!],
   });

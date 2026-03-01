@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -36,8 +36,8 @@ type Incident = {
   createdAt: string;
 };
 
-const SVG_WIDTH = 960;
-const SVG_HEIGHT = 600;
+const SVG_WIDTH = 975;
+const SVG_HEIGHT = 610;
 
 const SEVERITY_COLORS: Record<string, string> = {
   critical: "#ef4444",
@@ -60,6 +60,24 @@ function SeverityBadge({ severity }: { severity: string }) {
   );
 }
 
+function computePathBBox(d: string): { x: number; y: number; width: number; height: number } {
+  const nums: number[] = [];
+  const matches = d.match(/[-+]?\d*\.?\d+/g);
+  if (!matches) return { x: 0, y: 0, width: 975, height: 610 };
+  for (let i = 0; i < matches.length - 1; i += 2) {
+    nums.push(parseFloat(matches[i]), parseFloat(matches[i + 1]));
+  }
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (let i = 0; i < nums.length - 1; i += 2) {
+    if (nums[i] < minX) minX = nums[i];
+    if (nums[i] > maxX) maxX = nums[i];
+    if (nums[i + 1] < minY) minY = nums[i + 1];
+    if (nums[i + 1] > maxY) maxY = nums[i + 1];
+  }
+  const pad = 20;
+  return { x: minX - pad, y: minY - pad, width: maxX - minX + pad * 2, height: maxY - minY + pad * 2 };
+}
+
 function StateDetailPanel({
   stateId,
   stateName,
@@ -74,6 +92,7 @@ function StateDetailPanel({
   onClose: () => void;
 }) {
   const statePath = US_STATES.find((s) => s.id === stateId)?.path || "";
+  const bbox = useMemo(() => computePathBBox(statePath), [statePath]);
 
   const stateCameras = cameras.filter((c) => {
     if (!c.coordinates) return false;
@@ -85,31 +104,36 @@ function StateDetailPanel({
     return getStateForCoordinates(i.coordinates.lat, i.coordinates.lng) === stateId;
   });
 
+  const pinScale = Math.max(1, Math.min(bbox.width, bbox.height) / 120);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (panelRef.current) {
+      panelRef.current.setAttribute("enable-xr", "");
+      panelRef.current.style.setProperty("--xr-back", "80px");
+      panelRef.current.style.setProperty("--xr-background-material", "thick");
+    }
+  }, []);
+
   return (
     <div
       className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={onClose}
       data-testid="state-detail-overlay"
-      enable-xr
     >
       <div
-        className="relative w-[90%] max-w-4xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden xr-elevated"
+        ref={panelRef}
+        className="relative w-[90%] max-w-4xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
-        style={{
-          // @ts-ignore
-          "--xr-back": "80",
-          "--xr-background-material": "thick",
-        }}
-        enable-xr
       >
         <div className="flex items-center justify-between p-4 border-b border-slate-700">
           <div className="flex items-center gap-3">
             <Shield className="h-5 w-5 text-red-500" />
             <h2 className="text-lg font-bold text-white" data-testid="state-detail-title">{stateName}</h2>
-            <Badge variant="outline" className="text-[10px] border-slate-600 text-slate-400">
+            <Badge variant="outline" className="text-[10px] border-slate-600 text-slate-400" data-testid="state-camera-count">
               {stateCameras.length} cameras
             </Badge>
-            <Badge variant="outline" className="text-[10px] border-red-800 text-red-400">
+            <Badge variant="outline" className="text-[10px] border-red-800 text-red-400" data-testid="state-incident-count">
               {stateIncidents.length} incidents
             </Badge>
           </div>
@@ -126,22 +150,23 @@ function StateDetailPanel({
 
         <div className="grid grid-cols-2 gap-0 h-[500px]">
           <div className="border-r border-slate-700 p-4 flex items-center justify-center">
-            <svg viewBox="100 50 800 500" className="w-full h-full" style={{ maxHeight: "460px" }}>
+            <svg viewBox={`${bbox.x} ${bbox.y} ${bbox.width} ${bbox.height}`} className="w-full h-full" style={{ maxHeight: "460px" }}>
               <path
                 d={statePath}
                 fill="rgba(30, 41, 59, 0.8)"
                 stroke="rgba(100, 116, 139, 0.6)"
-                strokeWidth="2"
+                strokeWidth={Math.max(0.5, pinScale * 0.5)}
                 className="drop-shadow-lg"
               />
               {stateCameras.map((cam) => {
                 if (!cam.coordinates) return null;
-                const pos = projectToSvg(cam.coordinates.lat, cam.coordinates.lng, SVG_WIDTH, SVG_HEIGHT);
+                const pos = projectToSvg(cam.coordinates.lat, cam.coordinates.lng);
+                if (!pos) return null;
                 return (
                   <g key={`cam-detail-${cam.id}`}>
-                    <circle cx={pos.x} cy={pos.y} r="8" fill="rgba(100, 116, 139, 0.3)" stroke="none" />
-                    <circle cx={pos.x} cy={pos.y} r="5" fill="#94a3b8" stroke="#475569" strokeWidth="1.5" />
-                    <text x={pos.x + 10} y={pos.y + 4} fill="#94a3b8" fontSize="9" fontFamily="monospace">
+                    <circle cx={pos.x} cy={pos.y} r={pinScale * 3} fill="rgba(100, 116, 139, 0.3)" stroke="none" />
+                    <circle cx={pos.x} cy={pos.y} r={pinScale * 2} fill="#94a3b8" stroke="#475569" strokeWidth={pinScale * 0.5} />
+                    <text x={pos.x + pinScale * 4} y={pos.y + pinScale * 1.5} fill="#94a3b8" fontSize={pinScale * 3.5} fontFamily="monospace">
                       {cam.name.length > 20 ? cam.name.slice(0, 20) + "..." : cam.name}
                     </text>
                   </g>
@@ -149,16 +174,17 @@ function StateDetailPanel({
               })}
               {stateIncidents.map((inc) => {
                 if (!inc.coordinates) return null;
-                const pos = projectToSvg(inc.coordinates.lat, inc.coordinates.lng, SVG_WIDTH, SVG_HEIGHT);
+                const pos = projectToSvg(inc.coordinates.lat, inc.coordinates.lng);
+                if (!pos) return null;
                 const color = SEVERITY_COLORS[inc.severity] || "#ef4444";
                 return (
                   <g key={`inc-detail-${inc.id}`}>
-                    <circle cx={pos.x} cy={pos.y} r="12" fill={`${color}20`} stroke="none">
-                      <animate attributeName="r" values="8;14;8" dur="2s" repeatCount="indefinite" />
+                    <circle cx={pos.x} cy={pos.y} r={pinScale * 4} fill={`${color}20`} stroke="none">
+                      <animate attributeName="r" values={`${pinScale * 3};${pinScale * 5};${pinScale * 3}`} dur="2s" repeatCount="indefinite" />
                       <animate attributeName="opacity" values="0.6;0.2;0.6" dur="2s" repeatCount="indefinite" />
                     </circle>
-                    <circle cx={pos.x} cy={pos.y} r="5" fill={color} stroke="white" strokeWidth="1.5" />
-                    <text x={pos.x + 10} y={pos.y + 4} fill={color} fontSize="9" fontWeight="bold" fontFamily="monospace">
+                    <circle cx={pos.x} cy={pos.y} r={pinScale * 2} fill={color} stroke="white" strokeWidth={pinScale * 0.5} />
+                    <text x={pos.x + pinScale * 4} y={pos.y + pinScale * 1.5} fill={color} fontSize={pinScale * 3.5} fontWeight="bold" fontFamily="monospace">
                       {inc.title.length > 25 ? inc.title.slice(0, 25) + "..." : inc.title}
                     </text>
                   </g>
@@ -227,15 +253,17 @@ export default function MapView() {
   const [hoveredState, setHoveredState] = useState<string | null>(null);
   const [hoveredPin, setHoveredPin] = useState<{ type: string; id: number; x: number; y: number } | null>(null);
 
-  const { data: cameras = [] } = useQuery<CameraFeed[]>({
+  const { data: cameras = [], isLoading: camerasLoading, isError: camerasError } = useQuery<CameraFeed[]>({
     queryKey: ["/api/modules/camera-processing/feeds"],
     refetchInterval: 10000,
   });
 
-  const { data: incidents = [] } = useQuery<Incident[]>({
+  const { data: incidents = [], isLoading: incidentsLoading, isError: incidentsError } = useQuery<Incident[]>({
     queryKey: ["/api/incidents"],
     refetchInterval: 5000,
   });
+
+  const isLoading = camerasLoading || incidentsLoading;
 
   const activeIncidents = useMemo(
     () => incidents.filter((i) => i.status === "active" && i.coordinates),
@@ -318,13 +346,13 @@ export default function MapView() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4" data-testid="map-legend">
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5" data-testid="legend-cameras">
               <div className="h-2.5 w-2.5 rounded-full bg-slate-400" />
               <span className="text-[10px] text-slate-400">Camera ({activeCameras.length})</span>
             </div>
-            <div className="flex items-center gap-1.5 ml-3">
+            <div className="flex items-center gap-1.5 ml-3" data-testid="legend-incidents">
               <div className="h-2.5 w-2.5 rounded-full bg-red-500" />
               <span className="text-[10px] text-slate-400">Incident ({activeIncidents.length})</span>
             </div>
@@ -341,6 +369,19 @@ export default function MapView() {
       </div>
 
       <div className="flex-1 relative flex items-center justify-center p-4">
+        {isLoading && (
+          <div className="absolute inset-0 flex items-center justify-center z-20" data-testid="map-loading">
+            <div className="flex flex-col items-center gap-3">
+              <div className="h-8 w-8 border-2 border-slate-600 border-t-red-500 rounded-full animate-spin" />
+              <span className="text-xs text-slate-400 font-mono">LOADING SPATIAL DATA...</span>
+            </div>
+          </div>
+        )}
+        {(camerasError || incidentsError) && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 bg-red-950/80 border border-red-800 rounded-lg px-4 py-2" data-testid="map-error">
+            <span className="text-xs text-red-400 font-mono">DATA FEED ERROR — RETRYING...</span>
+          </div>
+        )}
         <svg
           viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
           className="w-full h-full max-w-[1200px]"
@@ -397,7 +438,8 @@ export default function MapView() {
 
           {activeCameras.map((cam) => {
             if (!cam.coordinates) return null;
-            const pos = projectToSvg(cam.coordinates.lat, cam.coordinates.lng, SVG_WIDTH, SVG_HEIGHT);
+            const pos = projectToSvg(cam.coordinates.lat, cam.coordinates.lng);
+            if (!pos) return null;
             return (
               <g
                 key={`cam-${cam.id}`}
@@ -422,7 +464,8 @@ export default function MapView() {
 
           {activeIncidents.map((inc) => {
             if (!inc.coordinates) return null;
-            const pos = projectToSvg(inc.coordinates.lat, inc.coordinates.lng, SVG_WIDTH, SVG_HEIGHT);
+            const pos = projectToSvg(inc.coordinates.lat, inc.coordinates.lng);
+            if (!pos) return null;
             const color = SEVERITY_COLORS[inc.severity] || "#ef4444";
             return (
               <g
@@ -530,8 +573,8 @@ export default function MapView() {
             STATES WITH ACTIVITY: {Object.keys(stateStats).length}
           </span>
         </div>
-        <span className="text-[10px] text-slate-600 font-mono">
-          CLICK STATE TO EXPAND 3D VIEW
+        <span className="text-[10px] text-slate-600 font-mono" data-testid="map-hint">
+          CLICK STATE TO EXPAND DETAIL VIEW
         </span>
       </div>
     </div>

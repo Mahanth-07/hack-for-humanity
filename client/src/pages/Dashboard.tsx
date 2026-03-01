@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 // @ts-ignore – no type declarations bundled with react-simple-maps
 import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from "react-simple-maps";
+import { motion, AnimatePresence, animate } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -256,15 +257,18 @@ function CameraFeedCard({
         await apiRequest("PATCH", `/api/modules/camera-processing/feeds/${feed.id}/video`, { videoUrl: response.objectPath });
         onVideoUploaded();
         onIncidentCreated(); // Force refresh to fetch the backfilled URLs
-        toast({ title: "Video Uploaded", description: `${feed.name} feed updated.` });
-        // Show location input after successful upload
+
+        // Immediately show location input so user can tag it while it processes
         setShowLocationInput(true);
-        setTimeout(() => locationInputRef.current?.focus(), 100);
-      } catch {
-        toast({ title: "Error", description: "Failed to save video reference.", variant: "destructive" });
+        toast({ title: "Video Uploaded", description: `${feed.name} feed updated. Please set a location.` });
+
+        const videoUrl = `/api/video/${encodeURIComponent(response.objectPath)}`;
+        setLocalVideoUrl(videoUrl);
+      } catch (e: any) {
+        toast({ title: "Update Failed", description: e.message, variant: "destructive" });
       }
     },
-    onError: () => {
+    onError: (error) => {
       toast({ title: "Upload Failed", description: "Could not upload video file.", variant: "destructive" });
     },
   });
@@ -648,6 +652,29 @@ function IncidentMap({ incidents }: { incidents: Incident[] }) {
 
   const [position, setPosition] = useState({ coordinates: [0, 0] as [number, number], zoom: 1 });
   const [selectedState, setSelectedState] = useState<{ name: string, count: number } | null>(null);
+  const animationRef = useRef<any>(null);
+
+  const smoothZoom = useCallback((targetCoords: [number, number], targetZoom: number) => {
+    if (animationRef.current) {
+      animationRef.current.stop();
+    }
+
+    // Default to current position, but if initial render just use 0,0
+    const startZoom = position.zoom || 1;
+    const startX = position.coordinates[0] || 0;
+    const startY = position.coordinates[1] || 0;
+
+    animationRef.current = animate(0, 1, {
+      duration: 0.6,
+      ease: "easeInOut",
+      onUpdate: (t: number) => {
+        const z = startZoom + (targetZoom - startZoom) * t;
+        const x = startX + (targetCoords[0] - startX) * t;
+        const y = startY + (targetCoords[1] - startY) * t;
+        setPosition({ zoom: z, coordinates: [x, y] });
+      }
+    });
+  }, [position.zoom, position.coordinates]);
 
   // Build pins — only for incidents whose location has known coordinates
   const pins = activeIncidents
@@ -685,15 +712,9 @@ function IncidentMap({ incidents }: { incidents: Incident[] }) {
     const coords = STATE_COORDS[stateName];
 
     if (coords) {
-      setPosition({
-        coordinates: coords,
-        zoom: 3.5
-      });
+      smoothZoom(coords, 3.5);
     } else {
-      setPosition(pos => ({
-        coordinates: pos.coordinates,
-        zoom: pos.zoom === 1 ? 2.5 : pos.zoom
-      }));
+      smoothZoom(position.coordinates, position.zoom === 1 ? 2.5 : position.zoom);
     }
 
     setSelectedState({ name: stateName, count });
@@ -701,16 +722,16 @@ function IncidentMap({ incidents }: { incidents: Incident[] }) {
 
   const handleZoomIn = () => {
     if (position.zoom >= 4) return;
-    setPosition(pos => ({ ...pos, zoom: pos.zoom * 1.5 }));
+    smoothZoom(position.coordinates, position.zoom * 1.5);
   };
 
   const handleZoomOut = () => {
     if (position.zoom <= 1) return;
-    setPosition(pos => ({ ...pos, zoom: pos.zoom / 1.5 }));
+    smoothZoom(position.coordinates, position.zoom / 1.5);
   };
 
   const resetMap = () => {
-    setPosition({ coordinates: [0, 0], zoom: 1 });
+    smoothZoom([0, 0], 1);
     setSelectedState(null);
   };
 
@@ -1587,76 +1608,84 @@ export default function Dashboard() {
   return (
     <div className="h-screen flex flex-col bg-slate-950 text-slate-200 overflow-hidden dark">
       {/* Maximized Panel Overlay */}
-      {maximizedPanel && (
-        <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col">
-          <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-slate-800">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-              {maximizedPanel === "map" && <><MapPin className="h-3.5 w-3.5" /> Incident Map</>}
-              {maximizedPanel === "incidents" && <><Activity className="h-3.5 w-3.5 text-red-400" /> Live Incident Feed</>}
-              {maximizedPanel === "contacts" && <><Users className="h-3.5 w-3.5" /> Contact Directory</>}
-              {maximizedPanel === "robocaller" && <><Phone className="h-3.5 w-3.5 text-green-400" /> Robocaller Console</>}
-              {maximizedPanel === "cameras" && <><Camera className="h-3.5 w-3.5" /> Camera Feeds</>}
-            </span>
-            <button
-              onClick={() => setMaximizedPanel(null)}
-              className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-200 transition-colors px-2 py-1 rounded hover:bg-slate-800"
-            >
-              <Minimize2 className="h-3.5 w-3.5" />
-              Minimize
-            </button>
-          </div>
-          <div className="flex-1 min-h-0 p-3 overflow-hidden">
-            {maximizedPanel === "map" && <IncidentMap incidents={incidents} />}
-            {maximizedPanel === "incidents" && (
-              <div className="h-full flex flex-col">
-                {activeIncidents.length > 0 && (
-                  <div className="shrink-0 flex justify-end mb-2">
-                    <button
-                      onClick={clearAllIncidents}
-                      className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-red-400 transition-colors"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      Clear all
-                    </button>
-                  </div>
-                )}
-                <div className="flex-1 min-h-0">
-                  <LiveIncidentFeed
-                    incidents={displayIncidents}
-                    onAlert={initiateRobocalls}
-                    onAnalyze={analyzeRisk}
-                    onFlag={(id) => setFlaggedIncidentIds(prev => [...prev, id])}
-                  />
-                </div>
-              </div>
-            )}
-            {maximizedPanel === "contacts" && (
-              <ContactsTable
-                contacts={contacts}
-                onAdd={createContact}
-                onEdit={editContact}
-                onDelete={deleteContact}
-                onToggle={toggleContact}
-              />
-            )}
-            {maximizedPanel === "robocaller" && <RobocallerConsole robocalls={robocalls} incidents={incidents} />}
-            {maximizedPanel === "cameras" && (
-              <ScrollArea className="h-full">
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 p-1 pb-4">
-                  {cameraFeeds.map((feed) => (
-                    <CameraFeedCard
-                      key={feed.id}
-                      feed={feed}
-                      onVideoUploaded={() => queryClient.invalidateQueries({ queryKey: ["/api/modules/camera-processing/feeds"] })}
-                      onIncidentCreated={() => queryClient.invalidateQueries({ queryKey: ["/api/incidents"] })}
+      <AnimatePresence>
+        {maximizedPanel && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="fixed inset-0 z-50 bg-slate-950 flex flex-col"
+          >
+            <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-slate-800">
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                {maximizedPanel === "map" && <><MapPin className="h-3.5 w-3.5" /> Incident Map</>}
+                {maximizedPanel === "incidents" && <><Activity className="h-3.5 w-3.5 text-red-400" /> Live Incident Feed</>}
+                {maximizedPanel === "contacts" && <><Users className="h-3.5 w-3.5" /> Contact Directory</>}
+                {maximizedPanel === "robocaller" && <><Phone className="h-3.5 w-3.5 text-green-400" /> Robocaller Console</>}
+                {maximizedPanel === "cameras" && <><Camera className="h-3.5 w-3.5" /> Camera Feeds</>}
+              </span>
+              <button
+                onClick={() => setMaximizedPanel(null)}
+                className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-200 transition-colors px-2 py-1 rounded hover:bg-slate-800"
+              >
+                <Minimize2 className="h-3.5 w-3.5" />
+                Minimize
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 p-3 overflow-hidden">
+              {maximizedPanel === "map" && <IncidentMap incidents={incidents} />}
+              {maximizedPanel === "incidents" && (
+                <div className="h-full flex flex-col">
+                  {activeIncidents.length > 0 && (
+                    <div className="shrink-0 flex justify-end mb-2">
+                      <button
+                        onClick={clearAllIncidents}
+                        className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-red-400 transition-colors"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        Clear all
+                      </button>
+                    </div>
+                  )}
+                  <div className="flex-1 min-h-0">
+                    <LiveIncidentFeed
+                      incidents={displayIncidents}
+                      onAlert={initiateRobocalls}
+                      onAnalyze={analyzeRisk}
+                      onFlag={(id) => setFlaggedIncidentIds(prev => [...prev, id])}
                     />
-                  ))}
+                  </div>
                 </div>
-              </ScrollArea>
-            )}
-          </div>
-        </div>
-      )}
+              )}
+              {maximizedPanel === "contacts" && (
+                <ContactsTable
+                  contacts={contacts}
+                  onAdd={createContact}
+                  onEdit={editContact}
+                  onDelete={deleteContact}
+                  onToggle={toggleContact}
+                />
+              )}
+              {maximizedPanel === "robocaller" && <RobocallerConsole robocalls={robocalls} incidents={incidents} />}
+              {maximizedPanel === "cameras" && (
+                <ScrollArea className="h-full">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 p-1 pb-4">
+                    {cameraFeeds.map((feed) => (
+                      <CameraFeedCard
+                        key={feed.id}
+                        feed={feed}
+                        onVideoUploaded={() => queryClient.invalidateQueries({ queryKey: ["/api/modules/camera-processing/feeds"] })}
+                        onIncidentCreated={() => queryClient.invalidateQueries({ queryKey: ["/api/incidents"] })}
+                      />
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Header Bar */}
       <header className="shrink-0 flex items-center justify-between px-4 py-3 bg-slate-900/80 border-b border-slate-800">

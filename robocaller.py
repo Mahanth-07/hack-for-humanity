@@ -133,6 +133,24 @@ def insert_robocall(conn, incident_id: int, contact_id: int, message: str) -> in
     return row["id"]
 
 
+def fetch_robocall_contact(conn, robocall_id: int) -> tuple[dict, int]:
+    """Fetch the contact assigned to an existing pending robocall row."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT * FROM robocalls WHERE id = %s LIMIT 1", (robocall_id,))
+        row = cur.fetchone()
+    if not row:
+        print(f"[robocaller] ERROR: robocall row {robocall_id} not found", file=sys.stderr)
+        sys.exit(1)
+    contact_id = row["contact_id"]
+    with conn.cursor() as cur:
+        cur.execute("SELECT * FROM contacts WHERE id = %s LIMIT 1", (contact_id,))
+        contact_row = cur.fetchone()
+    if not contact_row:
+        print(f"[robocaller] ERROR: contact {contact_id} not found", file=sys.stderr)
+        sys.exit(1)
+    return dict(contact_row), robocall_id
+
+
 def update_robocall_status(conn, robocall_id: int, status: str) -> None:
     completed_at = datetime.utcnow() if status in ("completed", "failed") else None
     with conn.cursor() as cur:
@@ -249,6 +267,14 @@ def main() -> None:
         print(f"[robocaller] ERROR: invalid incident_id: {sys.argv[1]}", file=sys.stderr)
         sys.exit(1)
 
+    robocall_id_arg: int | None = None
+    if len(sys.argv) >= 3:
+        try:
+            robocall_id_arg = int(sys.argv[2])
+        except ValueError:
+            print(f"[robocaller] ERROR: invalid robocall_id: {sys.argv[2]}", file=sys.stderr)
+            sys.exit(1)
+
     api_key = get_env("ELEVEN_API_KEY")
     agent_id = get_env("ELEVEN_AGENT_ID")
     phone_number_id = get_env("ELEVEN_AGENT_PHONE_NUMBER_ID")
@@ -260,24 +286,29 @@ def main() -> None:
         incident = fetch_incident(conn, incident_id)
         risk = fetch_latest_risk(conn, incident_id)
 
-        # Derive detection type from incident title ("Fire Detected — Camera 1" → "fire")
         title = incident.get("title", "")
         detection_type = title.split(" Detected")[0].lower().strip() if " Detected" in title else "anomaly"
 
-        contact = pick_contact(conn, detection_type)
-        if not contact:
-            print(f"[robocaller] No active contacts found for incident {incident_id}. Aborting.", file=sys.stderr)
-            sys.exit(1)
+        if robocall_id_arg is not None:
+            # Watcher already chose the contact and inserted the pending row — use it
+            contact, robocall_id = fetch_robocall_contact(conn, robocall_id_arg)
+            update_robocall_status(conn, robocall_id, "calling")
+        else:
+            # Manual/CLI invocation — pick contact and insert row ourselves
+            contact = pick_contact(conn, detection_type)
+            if not contact:
+                print(f"[robocaller] No active contacts found for incident {incident_id}. Aborting.", file=sys.stderr)
+                sys.exit(1)
+            location_str = incident.get("location") or "Unknown location"
+            message = f"Emergency alert for incident {incident_id}: {incident.get('title', '')} at {location_str}. Severity: {incident.get('severity', 'unknown')}."
+            robocall_id = insert_robocall(conn, incident_id, contact["id"], message)
+            print(f"[robocaller] Created robocall record id={robocall_id}")
 
         to_number = get_env("DEMO_TO_NUMBER", required=False) or contact["phone"]
         masked_to = f"***{to_number[-4:]}" if len(to_number) >= 4 else "***"
-        print(f"[robocaller] Incident {incident_id} | type={detection_type} | contact_id={contact['id']} | to={masked_to}")
+        print(f"[robocaller] Incident {incident_id} | robocall={robocall_id} | type={detection_type} | contact_id={contact['id']} | to={masked_to}")
 
         camera_facts, location, caller_context = build_dynamic_vars(incident, contact, risk)
-
-        message = f"Emergency alert for incident {incident_id}: {incident.get('title', '')} at {location}. Severity: {incident.get('severity', 'unknown')}."
-        robocall_id = insert_robocall(conn, incident_id, contact["id"], message)
-        print(f"[robocaller] Created robocall record id={robocall_id}")
 
         try:
             result = place_call(

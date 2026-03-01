@@ -1,13 +1,19 @@
+import { spawn } from "child_process";
+import path from "path";
+import { fileURLToPath } from "url";
 import { db } from "../../db";
 import { incidents, riskAssessments, contacts, robocalls } from "@shared/schema";
 import { asc, desc, eq, inArray } from "drizzle-orm";
 import { openai } from "../../replit_integrations/audio/client";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROBOCALLER_PY = path.resolve(__dirname, "../../../robocaller.py");
+
 type DbAssessment = typeof riskAssessments.$inferSelect;
 
 async function triggerRobocallFromTopAssessment() {
   try {
-    // 1. Only proceed if there are no pending or in-progress robocalls
+    // 1. Only proceed if there are no pending or in-progress robocalls (one call at a time)
     const activeRobocalls = await db
       .select({ id: robocalls.id })
       .from(robocalls)
@@ -96,25 +102,44 @@ async function triggerRobocallFromTopAssessment() {
     const matchedContact =
       activeContacts.find((c) => c.id === parsed.contactId) ?? activeContacts[0];
 
-    // 7. Build the robocall message and insert the row
+    // 7. Insert the robocall row as "pending" and capture its ID
     const message = `Emergency Alert: ${incident.title}. ${incident.description}. Severity level: ${incident.severity}. Location: ${incident.location ?? "Unknown"}. Please respond immediately.`;
 
-    await db.insert(robocalls).values({
+    const [inserted] = await db.insert(robocalls).values({
       incidentId: incident.id,
       contactId: matchedContact.id,
       message,
       status: "pending",
       attempts: 0,
+    }).returning();
+
+    // 8. Spawn robocaller.py with incident_id and robocall_id so it uses this row
+    const pythonBin = process.env.PYTHON_BIN || "python3";
+    const child = spawn(pythonBin, [ROBOCALLER_PY, String(incident.id), String(inserted.id)], {
+      env: { ...process.env },
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: false,
     });
 
-    // 8. Delete all risk assessment rows for that incident
-    await db.delete(riskAssessments).where(eq(riskAssessments.incidentId, incident.id));
+    child.stdout.on("data", (d: Buffer) => {
+      for (const line of d.toString().trim().split("\n")) {
+        if (line) console.log("[robocaller]", line);
+      }
+    });
+    child.stderr.on("data", (d: Buffer) => {
+      for (const line of d.toString().trim().split("\n")) {
+        if (line) console.error("[robocaller]", line);
+      }
+    });
+    child.on("error", (err: Error) => {
+      console.error("[robocaller] Failed to spawn robocaller.py:", err.message);
+    });
   } catch (err) {
     console.error("Error in robocall watcher:", err);
   }
 }
 
-// Continuously watch for unaddressed high-priority incidents every 15 seconds
+// Poll every 1 second; DB status check ("pending"/"calling") prevents overlapping calls
 setInterval(() => {
   triggerRobocallFromTopAssessment();
-}, 15_000);
+}, 1_000);

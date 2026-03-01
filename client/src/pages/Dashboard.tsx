@@ -92,7 +92,7 @@ type Contact = {
   role: string;
   priority: number;
   isActive: boolean;
-  metadata?: { location?: string; [key: string]: unknown };
+  metadata?: { location?: string;[key: string]: unknown };
   createdAt: string;
 };
 
@@ -211,16 +211,16 @@ const VALID_LOCATIONS = [
 
 // Icon + label for each detection type shown in the hazard overlay
 const DETECTION_ICON: Record<string, { icon: React.ReactNode; label: string }> = {
-  fire:          { icon: <Flame className="h-8 w-8 text-red-400 animate-pulse mb-1" />,      label: "Fire" },
-  flood:         { icon: <Droplets className="h-8 w-8 text-blue-400 animate-pulse mb-1" />,  label: "Flood" },
-  crash:         { icon: <Car className="h-8 w-8 text-orange-400 animate-pulse mb-1" />,     label: "Vehicle Crash" },
-  fight:         { icon: <Swords className="h-8 w-8 text-red-400 animate-pulse mb-1" />,     label: "Fight / Assault" },
-  weapon:        { icon: <CircleAlert className="h-8 w-8 text-red-500 animate-pulse mb-1" />, label: "Weapon" },
-  hazmat:        { icon: <FlaskConical className="h-8 w-8 text-yellow-400 animate-pulse mb-1" />, label: "Hazmat" },
-  structural:    { icon: <Building2 className="h-8 w-8 text-orange-400 animate-pulse mb-1" />, label: "Structural Damage" },
-  medical:       { icon: <HeartPulse className="h-8 w-8 text-pink-400 animate-pulse mb-1" />, label: "Medical Emergency" },
-  environmental: { icon: <Leaf className="h-8 w-8 text-green-400 animate-pulse mb-1" />,     label: "Environmental Hazard" },
-  anomaly:       { icon: <CircleAlert className="h-8 w-8 text-yellow-400 animate-pulse mb-1" />, label: "Anomaly" },
+  fire: { icon: <Flame className="h-8 w-8 text-red-400 animate-pulse mb-1" />, label: "Fire" },
+  flood: { icon: <Droplets className="h-8 w-8 text-blue-400 animate-pulse mb-1" />, label: "Flood" },
+  crash: { icon: <Car className="h-8 w-8 text-orange-400 animate-pulse mb-1" />, label: "Vehicle Crash" },
+  fight: { icon: <Swords className="h-8 w-8 text-red-400 animate-pulse mb-1" />, label: "Fight / Assault" },
+  weapon: { icon: <CircleAlert className="h-8 w-8 text-red-500 animate-pulse mb-1" />, label: "Weapon" },
+  hazmat: { icon: <FlaskConical className="h-8 w-8 text-yellow-400 animate-pulse mb-1" />, label: "Hazmat" },
+  structural: { icon: <Building2 className="h-8 w-8 text-orange-400 animate-pulse mb-1" />, label: "Structural Damage" },
+  medical: { icon: <HeartPulse className="h-8 w-8 text-pink-400 animate-pulse mb-1" />, label: "Medical Emergency" },
+  environmental: { icon: <Leaf className="h-8 w-8 text-green-400 animate-pulse mb-1" />, label: "Environmental Hazard" },
+  anomaly: { icon: <CircleAlert className="h-8 w-8 text-yellow-400 animate-pulse mb-1" />, label: "Anomaly" },
 };
 
 function CameraFeedCard({
@@ -383,8 +383,8 @@ function CameraFeedCard({
       if (analyzeIntervalRef.current) clearInterval(analyzeIntervalRef.current);
       clearTimeout(initial);
     };
-  // Only re-run when a new local video is selected — NOT on feed.videoUrl/feed.location changes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Only re-run when a new local video is selected — NOT on feed.videoUrl/feed.location changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localVideoUrl, feed.id]);
 
   const statusInfo = STATUS_BADGE[feed.status] || STATUS_BADGE.idle;
@@ -399,7 +399,7 @@ function CameraFeedCard({
         {hasVideo ? (
           <video
             ref={videoRef}
-            src={localVideoUrl || (feed.videoUrl ? `/objects${feed.videoUrl}` : undefined)}
+            src={localVideoUrl || (feed.videoUrl ? (feed.videoUrl.startsWith('http') ? feed.videoUrl : `/objects${feed.videoUrl}`) : undefined)}
             className="w-full h-full object-cover"
             muted
             loop
@@ -409,11 +409,10 @@ function CameraFeedCard({
           />
         ) : (
           <div
-            className={`w-full h-full flex flex-col items-center justify-center cursor-pointer transition-all duration-200 ${
-              isDragOver
+            className={`w-full h-full flex flex-col items-center justify-center cursor-pointer transition-all duration-200 ${isDragOver
                 ? "bg-blue-500/20 border-2 border-dashed border-blue-400"
                 : "bg-slate-950 hover:bg-slate-900/50"
-            }`}
+              }`}
             onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
             onDragLeave={() => setIsDragOver(false)}
             onDrop={handleDrop}
@@ -1038,11 +1037,10 @@ function ContactsTable({
           {contacts.map((contact) => (
             <div
               key={contact.id}
-              className={`flex items-center gap-2 p-2 rounded border transition-colors ${
-                contact.isActive
+              className={`flex items-center gap-2 p-2 rounded border transition-colors ${contact.isActive
                   ? "bg-slate-900/40 border-slate-700/40 hover:border-slate-600/50"
                   : "bg-slate-900/20 border-slate-800/30 opacity-50"
-              }`}
+                }`}
               data-testid={`contact-row-${contact.id}`}
             >
               <div className="flex-1 min-w-0">
@@ -1159,9 +1157,9 @@ function RobocallerConsole({ robocalls, incidents }: { robocalls: Robocall[]; in
             <span className="text-slate-500">[{new Date(call.createdAt).toLocaleTimeString()}]</span>
             <span className={
               call.status === "completed" ? "text-green-400" :
-              call.status === "failed" ? "text-red-400" :
-              call.status === "calling" ? "text-blue-400" :
-              "text-yellow-400"
+                call.status === "failed" ? "text-red-400" :
+                  call.status === "calling" ? "text-blue-400" :
+                    "text-yellow-400"
             }>
               {call.status.toUpperCase()}
             </span>
@@ -1250,10 +1248,10 @@ export default function Dashboard() {
         if (message.event?.includes("risk")) {
           queryClient.invalidateQueries({ queryKey: ["/api/modules/risk-analysis"] });
         }
-      } catch {}
+      } catch { }
     };
 
-    websocket.onerror = () => {};
+    websocket.onerror = () => { };
     websocket.onclose = () => {
       setTimeout(() => {
         queryClient.invalidateQueries();
@@ -1298,7 +1296,7 @@ export default function Dashboard() {
           apiRequest("POST", "/api/modules/camera-processing/feeds", { name: "Camera 4", location: "Unassigned" }),
         ]);
         queryClient.invalidateQueries({ queryKey: ["/api/modules/camera-processing/feeds"] });
-      } catch {}
+      } catch { }
     };
     seed();
   }, [cameraFeedsFetched]);
@@ -1377,7 +1375,7 @@ export default function Dashboard() {
       try {
         await apiRequest("PATCH", `/api/modules/contact-management/${id}/toggle`);
         queryClient.invalidateQueries({ queryKey: ["/api/modules/contact-management"] });
-      } catch {}
+      } catch { }
     },
     []
   );
@@ -1574,23 +1572,23 @@ export default function Dashboard() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {displayFeeds.length === 0
               ? Array.from({ length: 4 }).map((_, i) => (
-                  <Card key={i} className="bg-slate-900/80 border-slate-700/50 overflow-hidden">
-                    <div className="aspect-video bg-slate-950 flex items-center justify-center">
-                      <Loader2 className="h-6 w-6 text-slate-700 animate-spin" />
-                    </div>
-                    <div className="p-3">
-                      <div className="h-3 w-20 bg-slate-800 rounded animate-pulse" />
-                    </div>
-                  </Card>
-                ))
+                <Card key={i} className="bg-slate-900/80 border-slate-700/50 overflow-hidden">
+                  <div className="aspect-video bg-slate-950 flex items-center justify-center">
+                    <Loader2 className="h-6 w-6 text-slate-700 animate-spin" />
+                  </div>
+                  <div className="p-3">
+                    <div className="h-3 w-20 bg-slate-800 rounded animate-pulse" />
+                  </div>
+                </Card>
+              ))
               : displayFeeds.map((feed) => (
-                  <CameraFeedCard
-                    key={feed.id}
-                    feed={feed}
-                    onVideoUploaded={() => queryClient.invalidateQueries({ queryKey: ["/api/modules/camera-processing/feeds"] })}
-                    onIncidentCreated={() => queryClient.invalidateQueries({ queryKey: ["/api/incidents"] })}
-                  />
-                ))}
+                <CameraFeedCard
+                  key={feed.id}
+                  feed={feed}
+                  onVideoUploaded={() => queryClient.invalidateQueries({ queryKey: ["/api/modules/camera-processing/feeds"] })}
+                  onIncidentCreated={() => queryClient.invalidateQueries({ queryKey: ["/api/incidents"] })}
+                />
+              ))}
           </div>
         </section>
 

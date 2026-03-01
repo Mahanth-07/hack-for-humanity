@@ -152,24 +152,49 @@ def update_robocall_status(conn, robocall_id: int, status: str) -> None:
 def build_dynamic_vars(incident: dict, contact: dict, risk: dict | None) -> tuple[str, str, str]:
     """
     Build the three ElevenLabs dynamic variable strings.
+    Prefers RC_* env vars (rich camera AI context passed from the Node server)
+    and falls back to incident DB fields when not set.
     Returns (CAMERA_FACTS, LOCATION, CALLER_CONTEXT)
     """
-    desc = incident.get("description", "")
+    # Prefer live AI context from the camera module over DB-derived values
+    detection_type = os.environ.get("RC_DETECTION_TYPE") or (
+        incident.get("title", "").split(" Detected")[0]
+        if " Detected" in (incident.get("title") or "")
+        else "Unknown"
+    )
+    scene_context = os.environ.get("RC_SCENE_CONTEXT", "")
+    description = os.environ.get("RC_DESCRIPTION") or incident.get("description", "")
+    human_life = os.environ.get("RC_HUMAN_LIFE_PRESENT", "") == "1"
+    inanimate = os.environ.get("RC_INANIMATE_OBJECTS", "")
+    camera_name = os.environ.get("RC_CAMERA_NAME", "")
+    confidence_raw = os.environ.get("RC_CONFIDENCE", "")
+    confidence = int(confidence_raw) if confidence_raw.isdigit() else None
 
-    # CAMERA_FACTS — full sentence so the LLM can read it naturally
-    detection_type = incident.get("title", "").split(" Detected")[0] if " Detected" in (incident.get("title") or "") else "Unknown"
-    camera_facts = f"A {detection_type.lower()} was detected. {desc}".strip()
+    # CAMERA_FACTS — rich, first-responder-readable sentence built from AI output
+    facts_parts = [f"A {detection_type.lower()} was detected."]
+    if description:
+        facts_parts.append(description)
+    if scene_context:
+        facts_parts.append(scene_context)
+    if human_life:
+        facts_parts.append("Human life is present at the scene.")
+    if inanimate:
+        facts_parts.append(f"Objects visible: {inanimate}.")
+    if camera_name:
+        facts_parts.append(f"Source: {camera_name}.")
+    if confidence is not None:
+        facts_parts.append(f"Detection confidence: {confidence}%.")
+    camera_facts = " ".join(facts_parts).strip()
 
-    # LOCATION
-    location = incident.get("location") or "Unknown location"
+    # LOCATION — prefer env var, fall back to incident DB field
+    location = os.environ.get("RC_LOCATION") or incident.get("location") or "Unknown location"
 
-    # CALLER_CONTEXT — sentence-structured to avoid contradictory label confusion
-    # incidents.severity = immediate camera AI rating; risk_score = historical engine score
-    severity = incident.get("severity", "unknown").upper()
+    # CALLER_CONTEXT — severity + status + risk recommendations
+    severity = (os.environ.get("RC_SEVERITY") or incident.get("severity", "unknown")).upper()
     status = incident.get("status", "active")
     context_parts = [
-        f"Alert level: {severity} (camera detection)",
-        f"Status: {status}",
+        f"Alert level: {severity} (camera AI detection)",
+        f"Incident status: {status}",
     ]
     if risk:
         recommendations = risk.get("recommendations") or []

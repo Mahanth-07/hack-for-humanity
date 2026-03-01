@@ -1,7 +1,11 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 // @ts-ignore – no type declarations bundled with react-simple-maps
-import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
+import { ComposableMap, Geographies, Geography } from "react-simple-maps";
+// @ts-ignore
+import { geoMercator, geoPath } from "d3-geo";
+// @ts-ignore
+import { feature } from "topojson-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -586,29 +590,312 @@ function CameraFeedCard({
   );
 }
 
-const SEVERITY_PIN_COLORS: Record<string, string> = {
-  critical: "#dc2626",
-  high: "#f97316",
-  medium: "#eab308",
-  low: "#3b82f6",
+// ─── Choropleth scoring constants ───────────────────────────────────────────
+const SEV_WEIGHT: Record<string, number> = { low: 1, medium: 3, high: 8, critical: 20 };
+const TAU_MS = 6 * 60 * 60 * 1000; // 6 hours
+const K = 30;
+const ALPHA = 0.25;
+const GAMMA = 1.6;
+
+// Extract 2-letter state code from "City, ST" location string
+function locationToState(location?: string): string | null {
+  if (!location) return null;
+  const m = location.match(/,\s*([A-Z]{2})$/);
+  return m ? m[1] : null;
+}
+
+// Compute per-state EMA-smoothed scores
+function computeStateScores(
+  incidents: Incident[],
+  prev: Record<string, number>,
+  now: number,
+): Record<string, number> {
+  const raw: Record<string, number> = {};
+  for (const inc of incidents) {
+    if (inc.status !== "active") continue;
+    const state = locationToState(inc.location);
+    if (!state) continue;
+    const w = SEV_WEIGHT[inc.severity] ?? 1;
+    const decay = Math.exp(-(now - new Date(inc.createdAt).getTime()) / TAU_MS);
+    raw[state] = (raw[state] ?? 0) + w * decay;
+  }
+  const next: Record<string, number> = {};
+  const allStates = Array.from(new Set([...Object.keys(prev), ...Object.keys(raw)]));
+  for (const state of allStates) {
+    const sat = 1 - Math.exp(-(raw[state] ?? 0) / K);
+    const ema = ALPHA * sat + (1 - ALPHA) * (prev[state] ?? 0);
+    next[state] = Math.min(1, Math.max(0, ema));
+  }
+  return next;
+}
+
+// score → rgb color: yellow (#FDE047) → deep red (#991B1B)
+function scoreToColor(score: number): string {
+  const p = Math.pow(score, GAMMA);
+  const crush = 1 - 0.18 * p;
+  const r = Math.round(Math.min(255, (253 + (239 - 253) * p) * crush));
+  const g = Math.round(Math.min(255, (224 + (68  - 224) * p) * crush));
+  const b = Math.round(Math.min(255, (71  + (68  - 71)  * p) * crush));
+  return `rgb(${r},${g},${b})`;
+}
+
+// Derive a call_status proxy from incident fields
+function incidentCallStatus(inc: Incident): "routing" | "dialing" | "connected" | "completed" | "failed" {
+  if (inc.status === "resolved") return "completed";
+  if (inc.status === "escalated") return "connected";
+  const score = inc.riskScore ?? 0;
+  if (score > 70) return "dialing";
+  if (score > 30) return "routing";
+  return "routing";
+}
+
+const CALL_STATUS_STROKE: Record<string, string> = {
+  routing:   "#60A5FA",
+  dialing:   "#A78BFA",
+  connected: "#34D399",
+  completed: "#6EE7B7",
+  failed:    "#F87171",
+};
+const SEV_PIN_FILL: Record<string, string> = {
+  critical: "#EF4444",
+  high:     "#F97316",
+  medium:   "#FCD34D",
+  low:      "#3B82F6",
 };
 
-// GeoJSON for US states (Natural Earth via public CDN)
+// Full state name lookup
+const STATE_NAMES: Record<string, string> = {
+  AL:"Alabama",AK:"Alaska",AZ:"Arizona",AR:"Arkansas",CA:"California",
+  CO:"Colorado",CT:"Connecticut",DE:"Delaware",FL:"Florida",GA:"Georgia",
+  HI:"Hawaii",ID:"Idaho",IL:"Illinois",IN:"Indiana",IA:"Iowa",
+  KS:"Kansas",KY:"Kentucky",LA:"Louisiana",ME:"Maine",MD:"Maryland",
+  MA:"Massachusetts",MI:"Michigan",MN:"Minnesota",MS:"Mississippi",MO:"Missouri",
+  MT:"Montana",NE:"Nebraska",NV:"Nevada",NH:"New Hampshire",NJ:"New Jersey",
+  NM:"New Mexico",NY:"New York",NC:"North Carolina",ND:"North Dakota",OH:"Ohio",
+  OK:"Oklahoma",OR:"Oregon",PA:"Pennsylvania",RI:"Rhode Island",SC:"South Carolina",
+  SD:"South Dakota",TN:"Tennessee",TX:"Texas",UT:"Utah",VT:"Vermont",
+  VA:"Virginia",WA:"Washington",WV:"West Virginia",WI:"Wisconsin",WY:"Wyoming",
+  DC:"Washington D.C.",
+};
+
+// Approximate centroids [lng, lat] for zooming into each state
+const STATE_CENTERS: Record<string, [number, number]> = {
+  AL:[-86.9,32.8],AK:[-153,64],AZ:[-111.6,34.3],AR:[-92.4,34.9],CA:[-119.4,37.2],
+  CO:[-105.5,39.0],CT:[-72.7,41.6],DE:[-75.5,39.0],FL:[-81.5,27.8],GA:[-83.4,32.7],
+  HI:[-157.5,20.3],ID:[-114.5,44.4],IL:[-89.2,40.0],IN:[-86.3,40.3],IA:[-93.5,42.0],
+  KS:[-98.4,38.5],KY:[-84.9,37.5],LA:[-91.8,31.2],ME:[-69.2,45.4],MD:[-76.8,39.0],
+  MA:[-71.8,42.2],MI:[-85.4,44.3],MN:[-94.3,46.4],MS:[-89.7,32.7],MO:[-92.5,38.5],
+  MT:[-110.0,47.0],NE:[-99.9,41.5],NV:[-116.4,39.3],NH:[-71.6,43.7],NJ:[-74.5,40.1],
+  NM:[-106.1,34.4],NY:[-75.5,42.8],NC:[-79.4,35.5],ND:[-100.5,47.5],OH:[-82.8,40.4],
+  OK:[-97.5,35.5],OR:[-120.6,44.0],PA:[-77.2,40.9],RI:[-71.5,41.7],SC:[-80.9,33.8],
+  SD:[-100.2,44.4],TN:[-86.7,35.9],TX:[-99.3,31.5],UT:[-111.1,39.5],VT:[-72.7,44.0],
+  VA:[-78.5,37.5],WA:[-120.5,47.4],WV:[-80.6,38.6],WI:[-89.8,44.5],WY:[-107.6,43.0],
+  DC:[-77.0,38.9],
+};
+const SEV_PIN_RADIUS: Record<string, number> = {
+  critical: 12, high: 9, medium: 7, low: 5,
+};
+
+// FIPS numeric ID → 2-letter postal code (us-atlas states-10m uses FIPS IDs)
+const FIPS_TO_POSTAL: Record<string, string> = {
+  "01":"AL","02":"AK","04":"AZ","05":"AR","06":"CA","08":"CO","09":"CT",
+  "10":"DE","11":"DC","12":"FL","13":"GA","15":"HI","16":"ID","17":"IL",
+  "18":"IN","19":"IA","20":"KS","21":"KY","22":"LA","23":"ME","24":"MD",
+  "25":"MA","26":"MI","27":"MN","28":"MS","29":"MO","30":"MT","31":"NE",
+  "32":"NV","33":"NH","34":"NJ","35":"NM","36":"NY","37":"NC","38":"ND",
+  "39":"OH","40":"OK","41":"OR","42":"PA","44":"RI","45":"SC","46":"SD",
+  "47":"TN","48":"TX","49":"UT","50":"VT","51":"VA","53":"WA","54":"WV",
+  "55":"WI","56":"WY",
+};
+
 const GEO_URL = "https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json";
 
-function IncidentMap({ incidents }: { incidents: Incident[] }) {
-  const activeIncidents = incidents.filter((i) => i.status === "active");
+// Separate component: renders a single state filling the container using d3 fitExtent
+function StateDrillDown({
+  stateCode,
+  pins,
+  onBack,
+}: {
+  stateCode: string;
+  pins: Array<{ inc: Incident; coords: [number, number] }>;
+  onBack: () => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [paths, setPaths] = useState<{ d: string; code: string }[]>([]);
+  const [projection, setProjection] = useState<any>(null);
+  const [dims, setDims] = useState({ w: 0, h: 0 });
 
-  // Build pins — only for incidents whose location has known coordinates
-  const pins = activeIncidents
-    .map((inc) => {
-      const coords = inc.location ? CITY_COORDS[inc.location] : undefined;
-      return coords ? { incident: inc, coords } : null;
-    })
-    .filter(Boolean) as Array<{ incident: Incident; coords: [number, number] }>;
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const { width: w, height: h } = el.getBoundingClientRect();
+    if (!w || !h) return;
+    setDims({ w, h });
+
+    fetch(GEO_URL)
+      .then((r) => r.json())
+      .then((topo: any) => {
+        const geojson: any = feature(topo, topo.objects.states);
+        // Find just this state's feature
+        const stateFeat = geojson.features.find((f: any) => {
+          const rawId = String(f.id ?? "").padStart(2, "0");
+          return (FIPS_TO_POSTAL[rawId] ?? rawId) === stateCode;
+        });
+        if (!stateFeat) return;
+
+        // Fit projection to this state with 8% padding on each side
+        const pad = 0.08;
+        const proj = geoMercator().fitExtent(
+          [[w * pad, h * pad], [w * (1 - pad), h * (1 - pad)]],
+          stateFeat
+        );
+        const pathGen = geoPath().projection(proj);
+        const d = pathGen(stateFeat) ?? "";
+        setPaths([{ d, code: stateCode }]);
+        setProjection(() => proj);
+      });
+  }, [stateCode]);
+
+  const stateName = STATE_NAMES[stateCode] ?? stateCode;
 
   return (
-    <div className="relative w-full h-full bg-slate-950 rounded-lg overflow-hidden" data-testid="incident-map">
+    <div ref={containerRef} className="relative w-full h-full rounded-lg overflow-hidden"
+      style={{ background: "linear-gradient(160deg, #0f172a 0%, #1e3a2f 60%, #162032 100%)" }}
+    >
+      {/* Topographic texture */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.06]" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <pattern id="topo-drill" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M0 20 Q10 10 20 20 Q30 30 40 20" fill="none" stroke="#7dd3fc" strokeWidth="0.8"/>
+            <path d="M0 10 Q10 0 20 10 Q30 20 40 10" fill="none" stroke="#7dd3fc" strokeWidth="0.5"/>
+            <path d="M0 30 Q10 20 20 30 Q30 40 40 30" fill="none" stroke="#7dd3fc" strokeWidth="0.5"/>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#topo-drill)"/>
+      </svg>
+
+      {/* State SVG */}
+      {dims.w > 0 && (
+        <svg width={dims.w} height={dims.h} className="absolute inset-0">
+          {paths.map(({ d, code }) => (
+            <path key={code} d={d} fill="#1e3a2f" stroke="#4ade80" strokeWidth={1.5} />
+          ))}
+          {/* Incident pins */}
+          {projection && pins.map(({ inc, coords }) => {
+            const [px, py] = projection(coords) ?? [0, 0];
+            const fill = SEV_PIN_FILL[inc.severity] ?? "#94A3B8";
+            const stroke = CALL_STATUS_STROKE[incidentCallStatus(inc)];
+            const r = SEV_PIN_RADIUS[inc.severity] ?? 6;
+            return (
+              <g key={inc.id} transform={`translate(${px},${py})`}>
+                <circle r={r + 6} fill={fill} opacity={0.12}>
+                  <animate attributeName="r" values={`${r+4};${r+10};${r+4}`} dur="2s" repeatCount="indefinite"/>
+                  <animate attributeName="opacity" values="0.12;0.03;0.12" dur="2s" repeatCount="indefinite"/>
+                </circle>
+                <circle r={r} fill={fill} stroke={stroke} strokeWidth={2.5}/>
+                <text textAnchor="middle" y={-(r + 6)}
+                  style={{ fontSize: "7px", fontWeight: "bold", fill: "white", pointerEvents: "none" }}>
+                  {inc.title.length > 22 ? inc.title.slice(0, 22) + "…" : inc.title}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      )}
+
+      {/* Back button */}
+      <button onClick={onBack}
+        className="absolute top-2 left-2 flex items-center gap-1.5 bg-slate-800/90 hover:bg-slate-700 border border-slate-600 text-slate-200 text-[11px] font-medium px-2.5 py-1.5 rounded transition-colors z-10"
+      >
+        ← Back to US
+      </button>
+
+      {/* State name + count top-right */}
+      <div className="absolute top-2 right-2 bg-black/70 border border-slate-700 px-3 py-1.5 rounded text-slate-200 z-10">
+        <p className="text-sm font-bold text-white leading-tight">{stateName}</p>
+        <p className="text-[10px] text-slate-400">{pins.length} active incident{pins.length !== 1 ? "s" : ""}</p>
+      </div>
+
+      {/* Pin legend */}
+      <div className="absolute bottom-2 left-2 flex flex-col gap-1 bg-black/70 rounded px-2 py-1.5 z-10">
+        <div className="flex gap-2">
+          {(["critical","high","medium","low"] as const).map((s) => (
+            <div key={s} className="flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full" style={{ background: SEV_PIN_FILL[s] }}/>
+              <span className="text-[9px] text-slate-400 capitalize">{s}</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          {(["connected","completed"] as const).map((cs) => (
+            <div key={cs} className="flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full border-2" style={{ borderColor: CALL_STATUS_STROKE[cs], background: "transparent" }}/>
+              <span className="text-[9px] text-slate-500">{cs}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IncidentMap({ incidents }: { incidents: Incident[] }) {
+  const [stateScores, setStateScores] = useState<Record<string, number>>({});
+  const prevScoresRef = useRef<Record<string, number>>({});
+  const [selectedState, setSelectedState] = useState<string | null>(null);
+  const [hoveredState, setHoveredState] = useState<string | null>(null);
+
+  useEffect(() => {
+    const tick = () => {
+      const next = computeStateScores(incidents, prevScoresRef.current, Date.now());
+      prevScoresRef.current = next;
+      setStateScores({ ...next });
+    };
+    tick();
+    const id = setInterval(tick, 30_000);
+    return () => clearInterval(id);
+  }, [incidents]);
+
+  const activeIncidents = incidents.filter((i) => i.status === "active");
+
+  const statePins = selectedState
+    ? activeIncidents
+        .filter((inc) => locationToState(inc.location) === selectedState)
+        .map((inc) => {
+          const coords = inc.location ? CITY_COORDS[inc.location] : undefined;
+          return coords ? { inc, coords } : null;
+        })
+        .filter(Boolean) as Array<{ inc: Incident; coords: [number, number] }>
+    : [];
+
+  // Show drill-down view
+  if (selectedState) {
+    return (
+      <StateDrillDown
+        stateCode={selectedState}
+        pins={statePins}
+        onBack={() => setSelectedState(null)}
+      />
+    );
+  }
+
+  // Overview choropleth
+  return (
+    <div className="relative w-full h-full rounded-lg overflow-hidden" data-testid="incident-map"
+      style={{ background: "linear-gradient(160deg, #0f172a 0%, #1a2744 40%, #162032 100%)" }}
+    >
+      {/* Topographic texture overlay */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.06]" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <pattern id="topo-lines" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M0 20 Q10 10 20 20 Q30 30 40 20" fill="none" stroke="#7dd3fc" strokeWidth="0.8"/>
+            <path d="M0 10 Q10 0 20 10 Q30 20 40 10" fill="none" stroke="#7dd3fc" strokeWidth="0.5"/>
+            <path d="M0 30 Q10 20 20 30 Q30 40 40 30" fill="none" stroke="#7dd3fc" strokeWidth="0.5"/>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#topo-lines)"/>
+      </svg>
+
       <ComposableMap
         projection="geoAlbersUsa"
         projectionConfig={{ scale: 1000 }}
@@ -616,59 +903,41 @@ function IncidentMap({ incidents }: { incidents: Incident[] }) {
       >
         <Geographies geography={GEO_URL}>
           {({ geographies }: { geographies: any[] }) =>
-            geographies.map((geo: any) => (
-              <Geography
-                key={geo.rsmKey}
-                geography={geo}
-                fill="#1e293b"
-                stroke="#334155"
-                strokeWidth={0.5}
-                style={{
-                  default: { outline: "none" },
-                  hover: { outline: "none", fill: "#1e293b" },
-                  pressed: { outline: "none" },
-                }}
-              />
-            ))
+            geographies.map((geo: any) => {
+              const rawId: string = String(geo.id ?? "").padStart(2, "0");
+              const stateCode: string = FIPS_TO_POSTAL[rawId] ?? geo.properties?.postal ?? rawId;
+              const score = stateScores[stateCode] ?? 0;
+              const isHovered = hoveredState === stateCode;
+              const fill = score > 0 ? scoreToColor(score) : isHovered ? "#334155" : "#1e293b";
+
+              return (
+                <Geography
+                  key={geo.rsmKey}
+                  geography={geo}
+                  fill={fill}
+                  stroke="#475569"
+                  strokeWidth={0.6}
+                  style={{
+                    default: { outline: "none", opacity: isHovered ? 0.8 : 1 },
+                    hover:   { outline: "none", opacity: 0.8, cursor: "pointer" },
+                    pressed: { outline: "none" },
+                  }}
+                  onClick={() => { setSelectedState(stateCode); setHoveredState(null); }}
+                  onMouseEnter={() => setHoveredState(stateCode)}
+                  onMouseLeave={() => setHoveredState(null)}
+                />
+              );
+            })
           }
         </Geographies>
-
-        {pins.map(({ incident, coords }) => {
-          const color = SEVERITY_PIN_COLORS[incident.severity] || "#64748b";
-          return (
-            <Marker key={incident.id} coordinates={coords}>
-              {/* Pulsing halo */}
-              <circle r={10} fill={color} opacity={0.15}>
-                <animate attributeName="r" values="8;13;8" dur="2s" repeatCount="indefinite" />
-                <animate attributeName="opacity" values="0.2;0.05;0.2" dur="2s" repeatCount="indefinite" />
-              </circle>
-              {/* Solid dot */}
-              <circle r={5} fill={color} stroke="white" strokeWidth={1.5} />
-              {/* Label */}
-              <text
-                textAnchor="middle"
-                y={-10}
-                style={{ fontSize: "8px", fontWeight: "bold", fill: "white", pointerEvents: "none" }}
-              >
-                {incident.title.length > 18 ? incident.title.slice(0, 18) + "…" : incident.title}
-              </text>
-            </Marker>
-          );
-        })}
       </ComposableMap>
 
-      {/* Legend */}
-      <div className="absolute bottom-2 left-2 flex items-center gap-3 bg-black/60 rounded px-2 py-1">
-        {["critical", "high", "medium", "low"].map((sev) => (
-          <div key={sev} className="flex items-center gap-1">
-            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: SEVERITY_PIN_COLORS[sev] }} />
-            <span className="text-[9px] text-slate-400 capitalize">{sev}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="absolute top-2 left-2 text-[10px] text-slate-500 bg-black/50 px-2 py-0.5 rounded">
-        {activeIncidents.length} active incident{activeIncidents.length !== 1 ? "s" : ""}
+      {/* Choropleth legend */}
+      <div className="absolute bottom-2 left-2 flex items-center gap-2 bg-black/60 rounded px-2 py-1">
+        <span className="text-[9px] text-slate-500">Low</span>
+        <div className="w-20 h-2 rounded" style={{ background: "linear-gradient(to right, #FDE047, #EF4444, #991B1B)" }} />
+        <span className="text-[9px] text-slate-500">High</span>
+        <span className="text-[9px] text-slate-600 ml-2">{activeIncidents.length} active</span>
       </div>
     </div>
   );

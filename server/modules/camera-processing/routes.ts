@@ -388,6 +388,18 @@ router.patch("/feeds/:id/video", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Camera feed not found" });
     }
 
+    // Backfill any active incidents for this camera that missed the video URL
+    if (videoUrl) {
+      const allActiveIncidents = await db.select().from(incidents).where(eq(incidents.status, "active"));
+      const cameraIncidents = allActiveIncidents.filter(inc => inc.title.includes(`— ${updated.name}`));
+
+      for (const inc of cameraIncidents) {
+        if (!inc.videoUrl) {
+          await db.update(incidents).set({ videoUrl }).where(eq(incidents.id, inc.id));
+        }
+      }
+    }
+
     res.json(updated);
   } catch (error) {
     console.error("Error updating camera video:", error);

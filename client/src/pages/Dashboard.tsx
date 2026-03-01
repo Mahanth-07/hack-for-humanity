@@ -255,6 +255,7 @@ function CameraFeedCard({
       try {
         await apiRequest("PATCH", `/api/modules/camera-processing/feeds/${feed.id}/video`, { videoUrl: response.objectPath });
         onVideoUploaded();
+        onIncidentCreated(); // Force refresh to fetch the backfilled URLs
         toast({ title: "Video Uploaded", description: `${feed.name} feed updated.` });
         // Show location input after successful upload
         setShowLocationInput(true);

@@ -25,8 +25,7 @@ export interface RobocallContext {
 export function triggerRobocall(incidentId: number, context: RobocallContext): void {
   log(`Triggering robocall for incident ${incidentId} (${context.detectionType}, ${context.severity})`, "robocaller");
 
-  // Use anaconda python3 which has psycopg2 installed; fall back to python3 on PATH
-  const pythonBin = process.env.PYTHON_BIN || "/opt/anaconda3/bin/python3";
+  const pythonBin = process.env.PYTHON_BIN || "python3";
   const child = spawn(pythonBin, [ROBOCALLER_PY, String(incidentId)], {
     env: { ...process.env },
     stdio: ["ignore", "pipe", "pipe"],

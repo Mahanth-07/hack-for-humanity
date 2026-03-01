@@ -16,6 +16,7 @@ Env vars required:
 import os
 import sys
 import json
+import socket
 import urllib.request
 import urllib.error
 import psycopg2
@@ -133,17 +134,17 @@ def insert_robocall(conn, incident_id: int, contact_id: int, message: str) -> in
 
 
 def update_robocall_status(conn, robocall_id: int, status: str) -> None:
-    finished_at = "NOW()" if status in ("completed", "failed") else "NULL"
+    completed_at = datetime.utcnow() if status in ("completed", "failed") else None
     with conn.cursor() as cur:
         cur.execute(
-            f"""
+            """
             UPDATE robocalls
             SET status = %s,
                 last_attempt_at = NOW(),
-                completed_at = {finished_at}
+                completed_at = %s
             WHERE id = %s
             """,
-            (status, robocall_id),
+            (status, completed_at, robocall_id),
         )
         conn.commit()
 
@@ -237,6 +238,12 @@ def place_call(
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"ElevenLabs API error {e.code}: {body}") from e
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"ElevenLabs network error: {e.reason}") from e
+    except (socket.timeout, TimeoutError) as e:
+        raise RuntimeError(f"ElevenLabs request timed out: {e}") from e
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"ElevenLabs response parse error: {e}") from e
 
 
 def main() -> None:
@@ -271,7 +278,8 @@ def main() -> None:
             sys.exit(1)
 
         to_number = get_env("DEMO_TO_NUMBER", required=False) or contact["phone"]
-        print(f"[robocaller] Incident {incident_id} | type={detection_type} | contact={contact['name']} ({contact['role']}) | to={to_number}")
+        masked_to = f"***{to_number[-4:]}" if len(to_number) >= 4 else "***"
+        print(f"[robocaller] Incident {incident_id} | type={detection_type} | contact_id={contact['id']} | to={masked_to}")
 
         camera_facts, location, caller_context = build_dynamic_vars(incident, contact, risk)
 
@@ -290,7 +298,8 @@ def main() -> None:
                 caller_context=caller_context,
                 voice_id=voice_id,
             )
-            print(f"[robocaller] Call placed successfully: {json.dumps(result)}")
+            call_sid = result.get("callSid") or result.get("call_sid") or "<unknown>"
+            print(f"[robocaller] Call placed successfully for incident {incident_id} | callSid={call_sid}")
             update_robocall_status(conn, robocall_id, "completed")
         except RuntimeError as call_err:
             print(f"[robocaller] Call failed: {call_err}", file=sys.stderr)

@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 // @ts-ignore – no type declarations bundled with react-simple-maps
-import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
+import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from "react-simple-maps";
+import { motion, AnimatePresence, animate } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -256,15 +257,16 @@ function CameraFeedCard({
         await apiRequest("PATCH", `/api/modules/camera-processing/feeds/${feed.id}/video`, { videoUrl: response.objectPath });
         onVideoUploaded();
         onIncidentCreated(); // Force refresh to fetch the backfilled URLs
-        toast({ title: "Video Uploaded", description: `${feed.name} feed updated.` });
-        // Show location input after successful upload
-        setShowLocationInput(true);
-        setTimeout(() => locationInputRef.current?.focus(), 100);
-      } catch {
-        toast({ title: "Error", description: "Failed to save video reference.", variant: "destructive" });
+
+        toast({ title: "Video Uploaded", description: `${feed.name} feed updated. Please set a location.` });
+
+        const videoUrl = `/api/video/${encodeURIComponent(response.objectPath)}`;
+        setLocalVideoUrl(videoUrl);
+      } catch (e: any) {
+        toast({ title: "Update Failed", description: e.message, variant: "destructive" });
       }
     },
-    onError: () => {
+    onError: (error) => {
       toast({ title: "Upload Failed", description: "Could not upload video file.", variant: "destructive" });
     },
   });
@@ -278,6 +280,7 @@ function CameraFeedCard({
     }
     const objectUrl = URL.createObjectURL(file);
     setLocalVideoUrl(objectUrl);
+    setShowLocationInput(true); // Instantly show location input on file select
     uploadFile(file);
   }, [uploadFile, toast]);
 
@@ -449,19 +452,20 @@ function CameraFeedCard({
 
         {/* Hazard detected overlay */}
         {hazardAlert && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-950/70 backdrop-blur-[1px] z-10">
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-950/80 backdrop-blur-[2px] z-10 transition-all duration-300">
             {(DETECTION_ICON[hazardAlert.type] ?? DETECTION_ICON.anomaly).icon}
-            <span className="text-[11px] font-bold text-red-300 uppercase tracking-widest">Hazard Detected</span>
-            <span className="text-[10px] text-red-400/80 capitalize mt-0.5">
+            <span className="text-[13px] font-bold text-red-300 uppercase tracking-widest mt-1">HAZARD DETECTED</span>
+            <span className="text-[11px] font-medium text-red-400 capitalize mt-1">
               {(DETECTION_ICON[hazardAlert.type] ?? DETECTION_ICON.anomaly).label}
             </span>
-            <p className="text-[9px] text-red-300/70 text-center px-4 mt-1 line-clamp-2">{hazardAlert.description}</p>
+            <p className="text-[10px] text-red-200/70 text-center px-6 mt-3 leading-relaxed">{hazardAlert.description}</p>
             <button
-              className="mt-2 text-[9px] text-red-400/60 hover:text-red-300 underline"
+              className="mt-4 text-[10px] text-red-400 hover:text-red-300 bg-red-950/50 hover:bg-red-900/50 px-4 py-1.5 rounded-full transition-colors font-medium border border-red-900/50"
               onClick={() => setHazardAlert(null)}
             >
               Dismiss
             </button>
+            <div className="absolute inset-0 border-[3px] border-red-500/20 rounded-lg pointer-events-none animate-pulse-status"></div>
           </div>
         )}
 
@@ -500,8 +504,9 @@ function CameraFeedCard({
 
         {hasVideo && (
           <button
-            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 rounded p-1 hover:bg-black/80"
-            onClick={async () => {
+            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 rounded p-1 hover:bg-black/80 z-20"
+            onClick={async (e) => {
+              e.stopPropagation();
               // Clear local state immediately
               setLocalVideoUrl(null);
               setHazardAlert(null);
@@ -525,21 +530,23 @@ function CameraFeedCard({
             }}
             data-testid={`clear-video-${feed.id}`}
           >
-            <X className="h-3 w-3 text-white" />
+            <X className="h-4 w-4 text-white" />
           </button>
         )}
       </div>
 
-      <div className="p-3">
-        <div className="flex items-center justify-between">
-          <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-slate-200 truncate" data-testid={`camera-name-${feed.id}`}>{feed.name}</h3>
-            <p className="text-[11px] text-slate-500 flex items-center gap-1 truncate">
-              <MapPin className="h-3 w-3 shrink-0" />
-              {feed.location}
-            </p>
+      <div className="p-3 bg-slate-900/90 flex flex-col gap-2 relative z-20">
+        <div className="flex items-start justify-between">
+          <div className="min-w-0 flex-1 pr-2">
+            <h3 className="text-sm font-bold text-slate-200 truncate tracking-wide" data-testid={`camera-name-${feed.id}`}>{feed.name}</h3>
+            {!showLocationInput && (
+              <p className="text-[11px] text-slate-500 flex items-center gap-1.5 truncate mt-0.5">
+                <MapPin className="h-3 w-3 shrink-0" />
+                {feed.location}
+              </p>
+            )}
           </div>
-          <div className="flex items-center gap-1 ml-2">
+          <div className="flex items-center gap-1 shrink-0">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -558,39 +565,36 @@ function CameraFeedCard({
         </div>
 
         {showLocationInput && (
-          <div className="mt-2 flex flex-col gap-1.5" data-testid={`location-input-${feed.id}`}>
-            <div className="flex items-center gap-1.5">
-              <div className="relative flex-1">
-                <MapPin className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-500 pointer-events-none z-10" />
-                <select
-                  ref={locationInputRef}
-                  value={locationValue}
-                  onChange={(e) => setLocationValue(e.target.value)}
-                  className="w-full pl-6 pr-2 py-1.5 text-[11px] bg-slate-800 border border-slate-600 rounded text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 appearance-none"
-                  data-testid={`location-select-${feed.id}`}
-                >
-                  <option value="">— Select a US city —</option>
-                  {VALID_LOCATIONS.map((loc) => (
-                    <option key={loc} value={loc}>{loc}</option>
-                  ))}
-                </select>
-              </div>
-              <button
-                onClick={handleSaveLocation}
-                disabled={!locationValue || !VALID_LOCATIONS.includes(locationValue) || isSavingLocation}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium rounded bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white transition-colors"
-                data-testid={`save-location-${feed.id}`}
+          <div className="flex items-center gap-2 mt-1" data-testid={`location-input-${feed.id}`}>
+            <div className="relative flex-1 min-w-0">
+              <MapPin className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500 pointer-events-none z-10" />
+              <select
+                ref={locationInputRef}
+                value={locationValue}
+                onChange={(e) => setLocationValue(e.target.value)}
+                className="w-full pl-8 pr-2 py-2 text-[11px] bg-slate-950 border border-slate-700/60 rounded-md text-slate-200 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/30 transition-colors appearance-none truncate"
+                data-testid={`location-select-${feed.id}`}
               >
-                {isSavingLocation ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                Save
-              </button>
-              <button
-                onClick={() => { setShowLocationInput(false); setLocationValue(""); }}
-                className="p-1.5 rounded hover:bg-slate-800 text-slate-500 hover:text-slate-300 transition-colors"
-              >
-                <X className="h-3 w-3" />
-              </button>
+                <option value="">— Select a US city —</option>
+                {VALID_LOCATIONS.map((loc) => (
+                  <option key={loc} value={loc}>{loc}</option>
+                ))}
+              </select>
             </div>
+            <button
+              onClick={handleSaveLocation}
+              disabled={!locationValue || !VALID_LOCATIONS.includes(locationValue) || isSavingLocation}
+              className="flex items-center justify-center shrink-0 px-3 py-2 text-[11px] font-medium rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700 disabled:opacity-50 text-slate-300 transition-colors"
+              data-testid={`save-location-${feed.id}`}
+            >
+              {isSavingLocation ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+            </button>
+            <button
+              onClick={() => { setShowLocationInput(false); setLocationValue(""); }}
+              className="p-2 shrink-0 rounded-md hover:bg-slate-800 text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
         )}
       </div>
@@ -598,11 +602,45 @@ function CameraFeedCard({
   );
 }
 
-const SEVERITY_PIN_COLORS: Record<string, string> = {
-  critical: "#dc2626",
-  high: "#f97316",
-  medium: "#eab308",
-  low: "#3b82f6",
+const STATE_COORDS: Record<string, [number, number]> = {
+  "Alabama": [-86.9023, 32.3182], "Alaska": [-152.4044, 61.3707], "Arizona": [-111.0937, 34.0489],
+  "Arkansas": [-92.1999, 35.2010], "California": [-119.4179, 36.7783], "Colorado": [-105.7821, 39.5501],
+  "Connecticut": [-73.0877, 41.6032], "Delaware": [-75.5277, 38.9108], "Florida": [-81.5158, 27.9944],
+  "Georgia": [-83.6431, 32.1656], "Hawaii": [-155.5828, 19.8968], "Idaho": [-114.7420, 44.0682],
+  "Illinois": [-89.3985, 40.6331], "Indiana": [-86.1269, 40.5512], "Iowa": [-93.0977, 41.8780],
+  "Kansas": [-98.4842, 39.0119], "Kentucky": [-84.2700, 37.8393], "Louisiana": [-91.9623, 31.1695],
+  "Maine": [-69.3819, 45.2538], "Maryland": [-76.6413, 39.0458], "Massachusetts": [-71.3824, 42.2302],
+  "Michigan": [-85.6024, 44.3148], "Minnesota": [-94.6859, 46.7296], "Mississippi": [-89.3985, 32.3547],
+  "Missouri": [-91.8318, 38.5739], "Montana": [-110.3626, 46.9653], "Nebraska": [-99.9018, 41.1254],
+  "Nevada": [-116.4194, 38.8026], "New Hampshire": [-71.5724, 43.1939], "New Jersey": [-74.4057, 40.0583],
+  "New Mexico": [-106.2485, 34.5199], "New York": [-74.0060, 42.1657], "North Carolina": [-79.0193, 35.7596],
+  "North Dakota": [-100.4370, 47.5289], "Ohio": [-82.9071, 40.4173], "Oklahoma": [-97.5164, 35.0078],
+  "Oregon": [-120.5542, 43.8041], "Pennsylvania": [-77.1945, 41.2033], "Rhode Island": [-71.4774, 41.5801],
+  "South Carolina": [-81.1637, 33.8361], "South Dakota": [-100.2263, 44.2998], "Tennessee": [-86.5804, 35.5175],
+  "Texas": [-99.9018, 31.9686], "Utah": [-111.0937, 39.3210], "Vermont": [-72.5778, 44.0000],
+  "Virginia": [-78.6569, 37.4316], "Washington": [-120.7401, 47.7511], "West Virginia": [-80.4549, 38.5976],
+  "Wisconsin": [-89.6165, 44.5000], "Wyoming": [-107.2903, 43.0760]
+};
+
+const STATE_ABBR_TO_NAME: Record<string, string> = {
+  "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas", "CA": "California",
+  "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware", "FL": "Florida", "GA": "Georgia",
+  "HI": "Hawaii", "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa",
+  "KS": "Kansas", "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland",
+  "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi", "MO": "Missouri",
+  "MT": "Montana", "NE": "Nebraska", "NV": "Nevada", "NH": "New Hampshire", "NJ": "New Jersey",
+  "NM": "New Mexico", "NY": "New York", "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio",
+  "OK": "Oklahoma", "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina",
+  "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah", "VT": "Vermont",
+  "VA": "Virginia", "WA": "Washington", "WV": "West Virginia", "WI": "Wisconsin", "WY": "Wyoming"
+};
+
+const STATE_CHOROPLETH_COLORS: Record<string, string> = {
+  critical: "#dc2626", // Red
+  high: "#f97316",     // Orange
+  medium: "#eab308",   // Yellow
+  low: "#fef08a",      // Light Yellow
+  none: "#1e293b"      // Slate Base
 };
 
 // GeoJSON for US states (Natural Earth via public CDN)
@@ -610,6 +648,32 @@ const GEO_URL = "https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json";
 
 function IncidentMap({ incidents }: { incidents: Incident[] }) {
   const activeIncidents = incidents.filter((i) => i.status === "active");
+
+  const [position, setPosition] = useState({ coordinates: [0, 0] as [number, number], zoom: 1 });
+  const [selectedState, setSelectedState] = useState<{ name: string, count: number } | null>(null);
+  const animationRef = useRef<any>(null);
+
+  const smoothZoom = useCallback((targetCoords: [number, number], targetZoom: number) => {
+    if (animationRef.current) {
+      animationRef.current.stop();
+    }
+
+    // Default to current position, but if initial render just use 0,0
+    const startZoom = position.zoom || 1;
+    const startX = position.coordinates[0] || 0;
+    const startY = position.coordinates[1] || 0;
+
+    animationRef.current = animate(0, 1, {
+      duration: 0.6,
+      ease: "easeInOut",
+      onUpdate: (t: number) => {
+        const z = startZoom + (targetZoom - startZoom) * t;
+        const x = startX + (targetCoords[0] - startX) * t;
+        const y = startY + (targetCoords[1] - startY) * t;
+        setPosition({ zoom: z, coordinates: [x, y] });
+      }
+    });
+  }, [position.zoom, position.coordinates]);
 
   // Build pins — only for incidents whose location has known coordinates
   const pins = activeIncidents
@@ -619,6 +683,57 @@ function IncidentMap({ incidents }: { incidents: Incident[] }) {
     })
     .filter(Boolean) as Array<{ incident: Incident; coords: [number, number] }>;
 
+  const stateData = useMemo(() => {
+    const data: Record<string, { severity: string, count: number, weight: number }> = {};
+    for (const inc of activeIncidents) {
+      if (!inc.location) continue;
+      const match = inc.location.match(/,\s*([A-Z]{2})$/);
+      if (!match) continue;
+      const abbr = match[1];
+      const stateName = STATE_ABBR_TO_NAME[abbr];
+      if (!stateName) continue;
+
+      if (!data[stateName]) {
+        data[stateName] = { severity: inc.severity, count: 0, weight: INCIDENT_SEVERITY_WEIGHT[inc.severity] };
+      }
+      data[stateName].count += 1;
+      if (INCIDENT_SEVERITY_WEIGHT[inc.severity] > data[stateName].weight) {
+        data[stateName].severity = inc.severity;
+        data[stateName].weight = INCIDENT_SEVERITY_WEIGHT[inc.severity];
+      }
+    }
+    return data;
+  }, [activeIncidents]);
+
+  const handleStateClick = (geo: any) => {
+    const stateName = geo.properties.name;
+    const count = stateData[stateName]?.count || 0;
+    const coords = STATE_COORDS[stateName];
+
+    if (coords) {
+      smoothZoom(coords, 3.5);
+    } else {
+      smoothZoom(position.coordinates, position.zoom === 1 ? 2.5 : position.zoom);
+    }
+
+    setSelectedState({ name: stateName, count });
+  };
+
+  const handleZoomIn = () => {
+    if (position.zoom >= 4) return;
+    smoothZoom(position.coordinates, position.zoom * 1.5);
+  };
+
+  const handleZoomOut = () => {
+    if (position.zoom <= 1) return;
+    smoothZoom(position.coordinates, position.zoom / 1.5);
+  };
+
+  const resetMap = () => {
+    smoothZoom([0, 0], 1);
+    setSelectedState(null);
+  };
+
   return (
     <div className="relative w-full h-full bg-slate-950 rounded-lg overflow-hidden" data-testid="incident-map">
       <ComposableMap
@@ -626,62 +741,86 @@ function IncidentMap({ incidents }: { incidents: Incident[] }) {
         projectionConfig={{ scale: 1000 }}
         style={{ width: "100%", height: "100%", background: "transparent" }}
       >
-        <Geographies geography={GEO_URL}>
-          {({ geographies }: { geographies: any[] }) =>
-            geographies.map((geo: any) => (
-              <Geography
-                key={geo.rsmKey}
-                geography={geo}
-                fill="#1e293b"
-                stroke="#334155"
-                strokeWidth={0.5}
-                style={{
-                  default: { outline: "none" },
-                  hover: { outline: "none", fill: "#1e293b" },
-                  pressed: { outline: "none" },
-                }}
-              />
-            ))
-          }
-        </Geographies>
+        <ZoomableGroup
+          zoom={position.zoom}
+          center={position.coordinates}
+          onMoveEnd={(pos: any) => setPosition({ coordinates: pos.coordinates, zoom: pos.zoom })}
+        >
+          <Geographies geography={GEO_URL}>
+            {({ geographies }: { geographies: any[] }) =>
+              geographies.map((geo: any) => {
+                const stateName = geo.properties.name;
+                const sData = stateData[stateName];
+                const color = sData ? STATE_CHOROPLETH_COLORS[sData.severity] : STATE_CHOROPLETH_COLORS.none;
 
-        {pins.map(({ incident, coords }) => {
-          const color = SEVERITY_PIN_COLORS[incident.severity] || "#64748b";
-          return (
-            <Marker key={incident.id} coordinates={coords}>
-              {/* Pulsing halo */}
-              <circle r={10} fill={color} opacity={0.15}>
-                <animate attributeName="r" values="8;13;8" dur="2s" repeatCount="indefinite" />
-                <animate attributeName="opacity" values="0.2;0.05;0.2" dur="2s" repeatCount="indefinite" />
-              </circle>
-              {/* Solid dot */}
-              <circle r={5} fill={color} stroke="white" strokeWidth={1.5} />
-              {/* Label */}
-              <text
-                textAnchor="middle"
-                y={-10}
-                style={{ fontSize: "8px", fontWeight: "bold", fill: "white", pointerEvents: "none" }}
-              >
-                {incident.title.length > 18 ? incident.title.slice(0, 18) + "…" : incident.title}
-              </text>
-            </Marker>
-          );
-        })}
+                return (
+                  <Geography
+                    key={geo.rsmKey}
+                    geography={geo}
+                    fill={color}
+                    stroke="#0f172a" /* slate-900 border */
+                    strokeWidth={0.5 / position.zoom} // scale stroke down when zoomed in
+                    onClick={() => handleStateClick(geo)}
+                    style={{
+                      default: { outline: "none", transition: "fill 250ms" },
+                      hover: { outline: "none", fill: sData ? color : "#334155", cursor: "pointer", transition: "fill 250ms" },
+                      pressed: { outline: "none" },
+                    }}
+                  />
+                );
+              })
+            }
+          </Geographies>
+
+          {pins.map(({ incident, coords }) => {
+            const color = STATE_CHOROPLETH_COLORS[incident.severity] || "#64748b";
+            return (
+              <Marker key={incident.id} coordinates={coords}>
+                {/* Pulsing halo */}
+                <circle r={10 / position.zoom} fill={color} opacity={0.3}>
+                  <animate attributeName="r" values={`${8 / position.zoom};${15 / position.zoom};${8 / position.zoom}`} dur="2s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.4;0.1;0.4" dur="2s" repeatCount="indefinite" />
+                </circle>
+                {/* Solid dot */}
+                <circle r={4 / position.zoom} fill={color} stroke="white" strokeWidth={1.5 / position.zoom} />
+              </Marker>
+            );
+          })}
+        </ZoomableGroup>
       </ComposableMap>
 
       {/* Legend */}
       <div className="absolute bottom-2 left-2 flex items-center gap-3 bg-black/60 rounded px-2 py-1">
         {["critical", "high", "medium", "low"].map((sev) => (
           <div key={sev} className="flex items-center gap-1">
-            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: SEVERITY_PIN_COLORS[sev] }} />
+            <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: STATE_CHOROPLETH_COLORS[sev] }} />
             <span className="text-[9px] text-slate-400 capitalize">{sev}</span>
           </div>
         ))}
       </div>
 
-      <div className="absolute top-2 left-2 text-[10px] text-slate-500 bg-black/50 px-2 py-0.5 rounded">
-        {activeIncidents.length} active incident{activeIncidents.length !== 1 ? "s" : ""}
+      <div className="absolute top-2 left-2 flex flex-col gap-1">
+        <div className="text-[10px] text-slate-500 bg-black/50 px-2 py-0.5 rounded w-fit">
+          {activeIncidents.length} active incident{activeIncidents.length !== 1 ? "s" : ""}
+        </div>
+
+        {/* Zoom Controls */}
+        <div className="flex flex-col gap-1 mt-1 font-mono">
+          <button onClick={handleZoomIn} className="w-6 h-6 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 text-xs flex items-center justify-center">+</button>
+          <button onClick={handleZoomOut} className="w-6 h-6 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 text-xs flex items-center justify-center">-</button>
+          <button onClick={resetMap} className="w-6 h-6 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 text-[9px] flex items-center justify-center">RST</button>
+        </div>
       </div>
+
+      {/* Selected State Info */}
+      {selectedState && (
+        <div className="absolute top-2 right-2 bg-slate-900/90 border border-slate-700 p-2 rounded shadow-lg flex flex-col items-end pointer-events-none">
+          <span className="text-xs font-bold text-slate-200">{selectedState.name}</span>
+          <span className="text-[10px] text-slate-400">
+            {selectedState.count} Incident{selectedState.count !== 1 ? "s" : ""}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -765,33 +904,35 @@ function LiveIncidentFeed({
   incidents,
   onAlert,
   onAnalyze,
+  onFlag,
 }: {
   incidents: Incident[];
   onAlert: (id: number) => void;
   onAnalyze: (id: number) => void;
+  onFlag: (id: number) => void;
 }) {
   const rankBadgeClasses = (severity: string) => {
-    if (severity === "critical") return "border-red-500/80 bg-red-500/20 text-red-200";
-    if (severity === "high") return "border-orange-500/80 bg-orange-500/20 text-orange-200";
-    if (severity === "medium") return "border-amber-500/80 bg-amber-500/20 text-amber-200";
-    return "border-slate-600 bg-slate-700/50 text-slate-300";
+    if (severity === "critical") return "border-red-900/50 bg-red-950/60 text-red-300";
+    if (severity === "high") return "border-orange-900/50 bg-orange-950/60 text-orange-300";
+    if (severity === "medium") return "border-amber-900/50 bg-amber-950/60 text-amber-300";
+    return "border-slate-700 bg-slate-900 text-slate-300";
   };
 
   const cardBorderClasses = (rank: number, severity: string) => {
-    if (rank === 1) return "border-red-500/70 bg-red-500/8 shadow-[0_0_0_1px_rgba(239,68,68,0.25)]";
-    if (rank === 2) return "border-orange-500/60 bg-orange-500/6";
-    if (rank === 3) return "border-amber-500/60 bg-amber-500/6";
-    if (severity === "critical") return "border-red-500/30";
-    if (severity === "high") return "border-orange-500/30";
-    return "border-slate-700/50";
+    if (rank === 1) return "border-red-900/30 bg-red-950/10 border-l-[3px] border-l-red-500";
+    if (rank === 2) return "border-orange-900/30 bg-orange-950/10 border-l-[3px] border-l-orange-500";
+    if (rank === 3) return "border-amber-900/30 bg-amber-950/10 border-l-[3px] border-l-amber-500";
+    if (severity === "critical") return "border-red-900/20 border-l-[3px] border-l-red-500/50";
+    if (severity === "high") return "border-orange-900/20 border-l-[3px] border-l-orange-500/50";
+    return "border-slate-800 border-l-[3px] border-l-slate-600";
   };
 
   return (
-    <ScrollArea className="h-full" data-testid="incident-feed">
-      <div className="space-y-2 pr-3">
+    <ScrollArea className="h-full pr-3 relative overflow-visible" data-testid="incident-feed">
+      <div className="space-y-3 pb-2">
         {incidents.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-slate-500">
-            <CheckCircle2 className="h-8 w-8 mb-2 opacity-50" />
+            <CheckCircle2 className="h-8 w-8 mb-2 opacity-30" />
             <p className="text-sm">No active incidents</p>
           </div>
         ) : (
@@ -802,90 +943,87 @@ function LiveIncidentFeed({
               return (
                 <div
                   key={incident.id}
-                  className={`p-3 bg-slate-900/60 rounded-lg border hover:border-slate-600/50 transition-colors ${cardBorderClasses(incident.riskRank ?? 999, incident.severity)}`}
+                  className={`p-3.5 rounded-lg border hover:bg-slate-900/40 transition-colors relative group ${cardBorderClasses(incident.riskRank ?? 999, incident.severity)}`}
                   data-testid={`incident-card-${incident.id}`}
                 >
-                  <div className="flex items-start gap-2">
+                  <div className="flex items-start gap-3">
                     {/* Rank block */}
-                    <div className={`shrink-0 min-w-[52px] rounded-md border px-1.5 py-1 text-center ${rankBadgeClasses(incident.severity)}`}>
-                      <p className="text-[9px] uppercase tracking-wide opacity-70">Rank</p>
-                      <p className="text-lg font-extrabold leading-none">#{incident.riskRank}</p>
+                    <div className={`shrink-0 w-12 h-12 flex flex-col justify-center items-center rounded-lg border ${rankBadgeClasses(incident.severity)}`}>
+                      <span className="text-[8px] uppercase tracking-widest font-bold opacity-80 leading-none mb-0.5">Rank</span>
+                      <span className="text-[17px] font-black leading-none mt-0.5">#{incident.riskRank}</span>
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Badge className={`text-[10px] px-1.5 py-0 ${SEVERITY_COLORS[incident.severity]}`}>
-                          {incident.severity.toUpperCase()}
-                        </Badge>
+                      <div className="flex items-start justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <Badge className={`text-[9px] px-1.5 py-0 rounded font-bold uppercase tracking-widest ${incident.severity === 'critical' ? 'bg-red-950 text-red-400 border border-red-900/60' : SEVERITY_COLORS[incident.severity]}`}>
+                            {incident.severity}
+                            {incident.status === "active" && (
+                              <span className="h-1 w-1 rounded-full bg-red-400 animate-pulse-status ml-1.5" />
+                            )}
+                          </Badge>
+                        </div>
+                        {/* Status generic pill */}
                         {incident.status === "active" && (
-                          <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse-status" />
+                          <div className="shrink-0 flex items-center bg-red-950/40 border border-red-900/50 px-2 py-0.5 rounded-full">
+                            <Phone className="h-2 w-2 text-red-500 mr-1 animate-pulse" />
+                            <span className="text-[8px] font-bold text-red-400 uppercase tracking-widest">Currently Dialing</span>
+                          </div>
                         )}
                       </div>
-                      <h4 className="text-sm font-medium text-slate-200 truncate">{incident.title}</h4>
-                      <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">{incident.description}</p>
+
+                      <h4 className="text-[13px] font-bold text-slate-200 truncate pr-4">{incident.title}</h4>
+                      <p className="text-[11px] text-slate-400/90 leading-relaxed line-clamp-2 mt-1.5 pr-2">{incident.description}</p>
 
                       {/* First-responder indicator badges */}
-                      <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
                         {meta.humanLife && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30">
+                          <span className="inline-flex items-center gap-1 text-[9px] font-medium px-2 py-0.5 rounded-full bg-red-950/80 text-red-400 border border-red-900">
                             <User className="h-2 w-2" />
-                            Human life
+                            A Human life
                           </span>
                         )}
                         {meta.noHumanLife && !meta.humanLife && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-slate-700/50 text-slate-500 border border-slate-700/30">
+                          <span className="inline-flex items-center gap-1 text-[9px] font-medium px-2 py-0.5 rounded-full bg-slate-900 text-slate-400 border border-slate-700">
                             <User className="h-2 w-2" />
                             No humans
                           </span>
                         )}
                         {meta.animals && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                          <span className="inline-flex items-center gap-1 text-[9px] font-medium px-2 py-0.5 rounded-full bg-amber-950 text-amber-400 border border-amber-900">
                             <PawPrint className="h-2 w-2" />
                             Animals
                           </span>
                         )}
                         {meta.objects && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-slate-700/50 text-slate-400 border border-slate-600/30">
+                          <span className="inline-flex items-center gap-1 text-[9px] font-medium px-2 py-0.5 rounded-full bg-slate-800/80 text-slate-400 border border-slate-700/60">
                             <Box className="h-2 w-2" />
                             {meta.objects.length > 30 ? meta.objects.slice(0, 30) + "…" : meta.objects}
                           </span>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-3 mt-1.5">
-                        {incident.location && (
-                          <span className="text-[10px] text-slate-500 flex items-center gap-0.5">
-                            <MapPin className="h-2.5 w-2.5" />
-                            {incident.location}
+                      <div className="flex items-center justify-between mt-3">
+                        <div className="flex items-center gap-3">
+                          {incident.location && (
+                            <span className="text-[10px] text-slate-500 font-medium flex items-center gap-1">
+                              <MapPin className="h-3 w-3" />
+                              {incident.location}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-slate-500 font-medium flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {new Date(incident.createdAt).toLocaleTimeString()}
                           </span>
-                        )}
-                        <span className="text-[10px] text-slate-600 flex items-center gap-0.5">
-                          <Clock className="h-2.5 w-2.5" />
-                          {new Date(incident.createdAt).toLocaleTimeString()}
-                        </span>
-                      </div>
-                    </div>
+                        </div>
 
-                    <div className="flex flex-col gap-1 shrink-0">
-                      <Button
-                        size="sm"
-                        className="h-6 px-2 text-[10px] bg-blue-600 hover:bg-blue-700"
-                        onClick={() => onAlert(incident.id)}
-                        data-testid={`alert-btn-${incident.id}`}
-                      >
-                        <Phone className="h-2.5 w-2.5 mr-0.5" />
-                        Alert
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-6 px-2 text-[10px] border-slate-700 hover:bg-slate-800"
-                        onClick={() => onAnalyze(incident.id)}
-                        data-testid={`analyze-btn-${incident.id}`}
-                      >
-                        <Zap className="h-2.5 w-2.5 mr-0.5" />
-                        Analyze
-                      </Button>
+                        <button
+                          onClick={() => onFlag(incident.id)}
+                          className="text-[10px] font-medium text-slate-500 hover:text-slate-300 transition-colors flex items-center gap-1 opacity-70 hover:opacity-100"
+                        >
+                          <span className="text-yellow-500/70 mb-[1px]">⚑</span> Flag
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1196,6 +1334,7 @@ export default function Dashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [maximizedPanel, setMaximizedPanel] = useState<string | null>(null);
+  const [flaggedIncidentIds, setFlaggedIncidentIds] = useState<number[]>([]);
   const rankingSyncInFlightRef = useRef(false);
   const analyzingIncidentsRef = useRef(new Set<number>());
 
@@ -1403,6 +1542,17 @@ export default function Dashboard() {
     () => rankIncidentsByRisk(incidents.filter((i) => i.status === "active"), riskAssessments),
     [incidents, riskAssessments],
   );
+
+  const displayIncidents = useMemo(
+    () => activeIncidents.filter((i) => !flaggedIncidentIds.includes(i.id)),
+    [activeIncidents, flaggedIncidentIds]
+  );
+
+  const flaggedIncidents = useMemo(
+    () => activeIncidents.filter((i) => flaggedIncidentIds.includes(i.id)),
+    [activeIncidents, flaggedIncidentIds]
+  );
+
   const activeIncidentIdsKey = useMemo(
     () => incidents.filter((i) => i.status === "active").map((i) => i.id).sort((a, b) => a - b).join(","),
     [incidents],
@@ -1457,124 +1607,149 @@ export default function Dashboard() {
   return (
     <div className="h-screen flex flex-col bg-slate-950 text-slate-200 overflow-hidden dark">
       {/* Maximized Panel Overlay */}
-      {maximizedPanel && (
-        <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col">
-          <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-slate-800">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-              {maximizedPanel === "map" && <><MapPin className="h-3.5 w-3.5" /> Incident Map</>}
-              {maximizedPanel === "incidents" && <><Activity className="h-3.5 w-3.5 text-red-400" /> Live Incident Feed</>}
-              {maximizedPanel === "contacts" && <><Users className="h-3.5 w-3.5" /> Contact Directory</>}
-              {maximizedPanel === "robocaller" && <><Phone className="h-3.5 w-3.5 text-green-400" /> Robocaller Console</>}
-              {maximizedPanel === "cameras" && <><Camera className="h-3.5 w-3.5" /> Camera Feeds</>}
-            </span>
-            <button
-              onClick={() => setMaximizedPanel(null)}
-              className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-200 transition-colors px-2 py-1 rounded hover:bg-slate-800"
-            >
-              <Minimize2 className="h-3.5 w-3.5" />
-              Minimize
-            </button>
-          </div>
-          <div className="flex-1 min-h-0 p-3 overflow-hidden">
-            {maximizedPanel === "map" && <IncidentMap incidents={incidents} />}
-            {maximizedPanel === "incidents" && (
-              <div className="h-full flex flex-col">
-                {activeIncidents.length > 0 && (
-                  <div className="shrink-0 flex justify-end mb-2">
-                    <button
-                      onClick={clearAllIncidents}
-                      className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-red-400 transition-colors"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      Clear all
-                    </button>
+      <AnimatePresence>
+        {maximizedPanel && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="fixed inset-0 z-50 bg-slate-950 flex flex-col"
+          >
+            <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-slate-800">
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                {maximizedPanel === "map" && <><MapPin className="h-3.5 w-3.5" /> Incident Map</>}
+                {maximizedPanel === "incidents" && <><Activity className="h-3.5 w-3.5 text-red-400" /> Live Incident Feed</>}
+                {maximizedPanel === "contacts" && <><Users className="h-3.5 w-3.5" /> Contact Directory</>}
+                {maximizedPanel === "robocaller" && <><Phone className="h-3.5 w-3.5 text-green-400" /> Robocaller Console</>}
+                {maximizedPanel === "cameras" && <><Camera className="h-3.5 w-3.5" /> Camera Feeds</>}
+              </span>
+              <button
+                onClick={() => setMaximizedPanel(null)}
+                className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-200 transition-colors px-2 py-1 rounded hover:bg-slate-800"
+              >
+                <Minimize2 className="h-3.5 w-3.5" />
+                Minimize
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 p-3 overflow-hidden">
+              {maximizedPanel === "map" && <IncidentMap incidents={incidents} />}
+              {maximizedPanel === "incidents" && (
+                <div className="h-full flex flex-col">
+                  {activeIncidents.length > 0 && (
+                    <div className="shrink-0 flex justify-end mb-2">
+                      <button
+                        onClick={clearAllIncidents}
+                        className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-red-400 transition-colors"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        Clear all
+                      </button>
+                    </div>
+                  )}
+                  <div className="flex-1 min-h-0">
+                    <LiveIncidentFeed
+                      incidents={displayIncidents}
+                      onAlert={initiateRobocalls}
+                      onAnalyze={analyzeRisk}
+                      onFlag={(id) => setFlaggedIncidentIds(prev => [...prev, id])}
+                    />
                   </div>
-                )}
-                <div className="flex-1 min-h-0">
-                  <LiveIncidentFeed incidents={activeIncidents} onAlert={initiateRobocalls} onAnalyze={analyzeRisk} />
                 </div>
-              </div>
-            )}
-            {maximizedPanel === "contacts" && (
-              <ContactsTable
-                contacts={contacts}
-                onAdd={createContact}
-                onEdit={editContact}
-                onDelete={deleteContact}
-                onToggle={toggleContact}
-              />
-            )}
-            {maximizedPanel === "robocaller" && <RobocallerConsole robocalls={robocalls} incidents={incidents} />}
-            {maximizedPanel === "cameras" && (
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 h-full">
-                {displayFeeds.map((feed) => (
-                  <CameraFeedCard
-                    key={feed.id}
-                    feed={feed}
-                    onVideoUploaded={() => queryClient.invalidateQueries({ queryKey: ["/api/modules/camera-processing/feeds"] })}
-                    onIncidentCreated={() => queryClient.invalidateQueries({ queryKey: ["/api/incidents"] })}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+              )}
+              {maximizedPanel === "contacts" && (
+                <ContactsTable
+                  contacts={contacts}
+                  onAdd={createContact}
+                  onEdit={editContact}
+                  onDelete={deleteContact}
+                  onToggle={toggleContact}
+                />
+              )}
+              {maximizedPanel === "robocaller" && <RobocallerConsole robocalls={robocalls} incidents={incidents} />}
+              {maximizedPanel === "cameras" && (
+                <ScrollArea className="h-full">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 p-1 pb-4">
+                    {cameraFeeds.map((feed) => (
+                      <CameraFeedCard
+                        key={feed.id}
+                        feed={feed}
+                        onVideoUploaded={() => queryClient.invalidateQueries({ queryKey: ["/api/modules/camera-processing/feeds"] })}
+                        onIncidentCreated={() => queryClient.invalidateQueries({ queryKey: ["/api/incidents"] })}
+                      />
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Header Bar */}
-      <header className="shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/80 border-b border-slate-800">
+      <header className="shrink-0 flex items-center justify-between px-4 py-3 bg-slate-900/80 border-b border-slate-800">
         <div className="flex items-center gap-3">
-          <Shield className="h-6 w-6 text-red-500" />
+          <div className="bg-blue-600 p-1.5 rounded-lg">
+            <Shield className="h-5 w-5 text-white fill-white/20" />
+          </div>
           <div>
-            <h1 className="text-sm font-bold tracking-tight" data-testid="dashboard-title">INCIDENT RESPONSE CENTER</h1>
-            <p className="text-[10px] text-slate-500">Real-time monitoring & coordination</p>
+            <h1 className="text-sm font-bold tracking-widest text-slate-100" data-testid="dashboard-title">GUARDIAN</h1>
+            <p className="text-[9px] font-medium tracking-widest text-slate-500 uppercase">Emergency Response Platform</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-6">
           {/* Module health indicators */}
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-4 border-r border-slate-800 pr-6">
+            <span className="text-[10px] font-bold text-slate-700 tracking-wider">SYSTEMS</span>
             {[
-              { key: "robocaller", label: "Robocaller" },
               { key: "risk_analysis", label: "Risk" },
               { key: "camera_processing", label: "Camera" },
               { key: "contact_management", label: "Contacts" },
             ].map((mod) => (
-              <div key={mod.key} className="flex items-center gap-1" data-testid={`health-${mod.key}`}>
+              <div key={mod.key} className="flex items-center gap-1.5" data-testid={`health-${mod.key}`}>
                 {getHealthIcon(mod.key)}
-                <span className="text-[10px] text-slate-500">{mod.label}</span>
+                <span className="text-[11px] text-slate-500">{mod.label}</span>
               </div>
             ))}
           </div>
 
           {/* Stats badges */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             {criticalCount > 0 && (
-              <Badge className="bg-red-600 text-white text-[10px] px-1.5 py-0 animate-pulse-status" data-testid="critical-badge">
+              <Badge className="bg-red-950 text-red-400 border border-red-900/50 text-[10px] px-2 py-0.5 animate-pulse-status" data-testid="critical-badge">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-500 mr-1.5"></span>
                 {criticalCount} CRITICAL
               </Badge>
             )}
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-slate-700 text-slate-400" data-testid="active-count-badge">
+            <Badge variant="outline" className="text-[10px] px-2 py-0.5 border-slate-800 text-slate-400 bg-slate-900/50" data-testid="active-count-badge">
+              <Activity className="h-3 w-3 mr-1.5 text-slate-500" />
               {activeIncidents.length} Active
+            </Badge>
+            <Badge variant="outline" className="text-[10px] px-2 py-0.5 border-yellow-900/50 text-yellow-500 bg-yellow-950/30" data-testid="flagged-count-badge">
+              <span className="h-3 w-3 mr-1 flex items-center justify-center">⚑</span>
+              1 Flagged
             </Badge>
           </div>
         </div>
       </header>
 
       {/* Main Grid */}
-      <main className="flex-1 grid grid-rows-[auto_1fr_1fr] gap-3 p-3 overflow-hidden min-h-0">
+      <main className="flex-1 grid grid-rows-[auto_1fr] gap-3 p-3 overflow-hidden min-h-0">
         {/* Row 1: Camera Feeds */}
         <section>
           <div className="flex items-center gap-2 mb-2">
-            <Camera className="h-4 w-4 text-slate-500" />
-            <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Camera Feeds</h2>
-            <span className="text-[10px] text-slate-600">{cameraFeeds.filter((f) => f.isActive).length} active</span>
+            <h2 className="text-[11px] font-bold text-slate-300 uppercase tracking-widest flex items-center gap-2 border-l-2 border-indigo-500 pl-2">
+              <Camera className="h-3.5 w-3.5 text-indigo-400" />
+              Camera Feeds
+            </h2>
+            <span className="text-[10px] text-slate-500 ml-1">{cameraFeeds.filter((f) => f.isActive).length} active</span>
             <MaxBtn panel="cameras" />
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {displayFeeds.length === 0
               ? Array.from({ length: 4 }).map((_, i) => (
-                <Card key={i} className="bg-slate-900/80 border-slate-700/50 overflow-hidden">
+                <Card key={i} className="bg-slate-900/80 border-slate-800 overflow-hidden">
                   <div className="aspect-video bg-slate-950 flex items-center justify-center">
                     <Loader2 className="h-6 w-6 text-slate-700 animate-spin" />
                   </div>
@@ -1594,95 +1769,145 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* Row 2: Map + Incident Feed */}
-        <section className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-3 min-h-0">
-          <Card className="bg-slate-900/50 border-slate-800 overflow-hidden">
-            <CardHeader className="py-2 px-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <MapPin className="h-3.5 w-3.5" />
-                  Incident Map
-                </CardTitle>
-                <MaxBtn panel="map" />
-              </div>
-            </CardHeader>
-            <CardContent className="p-2 h-[calc(100%-40px)]">
-              <IncidentMap incidents={incidents} />
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col">
-            <CardHeader className="py-2 px-3 shrink-0">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <Activity className="h-3.5 w-3.5 text-red-400" />
-                  Live Incident Feed
-                  {activeIncidents.length > 0 && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse-status" />
-                  )}
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  {activeIncidents.length > 0 && (
-                    <button
-                      onClick={clearAllIncidents}
-                      className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-red-400 transition-colors"
-                      data-testid="clear-incidents-btn"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      Clear all
-                    </button>
-                  )}
-                  <MaxBtn panel="incidents" />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-2 flex-1 min-h-0">
-              <LiveIncidentFeed
-                incidents={activeIncidents}
-                onAlert={initiateRobocalls}
-                onAnalyze={analyzeRisk}
-              />
-            </CardContent>
-          </Card>
-        </section>
-
-        {/* Row 3: Contacts + Robocaller Console */}
+        {/* Row 2: Maps + Contacts (Left), Feed + Flagged (Right) */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-3 min-h-0">
-          <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col">
-            <CardHeader className="py-2 px-3 shrink-0">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <Users className="h-3.5 w-3.5" />
-                  Contact Directory
-                </CardTitle>
-                <MaxBtn panel="contacts" />
-              </div>
-            </CardHeader>
-            <CardContent className="p-2 flex-1 min-h-0">
-              <ContactsTable
-                contacts={contacts}
-                onAdd={createContact}
-                onEdit={editContact}
-                onDelete={deleteContact}
-                onToggle={toggleContact}
-              />
-            </CardContent>
-          </Card>
+          {/* Left Column */}
+          <div className="flex flex-col gap-3 min-h-0">
+            {/* Incident Map */}
+            <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex-1 min-h-0 flex flex-col">
+              <CardHeader className="py-2 px-3 shrink-0">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-[11px] font-bold text-slate-300 uppercase tracking-widest flex items-center gap-2 border-l-2 border-indigo-500 pl-2">
+                    <MapPin className="h-3.5 w-3.5 text-indigo-400" />
+                    Incident Map
+                  </CardTitle>
+                  <MaxBtn panel="map" />
+                </div>
+              </CardHeader>
+              <CardContent className="p-2 flex-1 min-h-0">
+                <div className="h-full rounded-lg overflow-hidden border border-slate-800/60 bg-slate-950/50 relative">
+                  <IncidentMap incidents={incidents} />
+                </div>
+              </CardContent>
+            </Card>
 
-          <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col">
-            <CardHeader className="py-2 px-3 shrink-0">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <Phone className="h-3.5 w-3.5 text-green-400" />
-                  Robocaller Console
-                </CardTitle>
-                <MaxBtn panel="robocaller" />
-              </div>
-            </CardHeader>
-            <CardContent className="p-2 flex-1 min-h-0">
-              <RobocallerConsole robocalls={robocalls} incidents={incidents} />
-            </CardContent>
-          </Card>
+            {/* Contact Directory (Minimized to Header Only) */}
+            <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col shrink-0">
+              <CardHeader className="py-2 px-3 shrink-0">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-[11px] font-bold text-slate-300 uppercase tracking-widest flex items-center gap-2 border-l-2 border-indigo-500 pl-2">
+                    <Users className="h-3.5 w-3.5 text-indigo-400" />
+                    Contact Directory <span className="text-[10px] text-slate-500 ml-1 font-normal normal-case">({contacts.length})</span>
+                  </CardTitle>
+                  <MaxBtn panel="contacts" />
+                </div>
+              </CardHeader>
+            </Card>
+          </div>
+
+          {/* Right Column */}
+          <div className="flex flex-col gap-3 min-h-0">
+            {/* Live Incident Feed */}
+            <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col flex-1 min-h-0 relative">
+              <CardHeader className="py-2 px-3 shrink-0 z-10 bg-slate-900/80 border-b border-slate-800/50 backdrop-blur-sm">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-[11px] font-bold text-slate-300 uppercase tracking-widest flex items-center gap-2 border-l-2 border-red-500 pl-2">
+                    <Activity className="h-3.5 w-3.5 text-red-500" />
+                    Live Incident Feed
+                    {activeIncidents.length > 0 && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse-status ml-1" />
+                    )}
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    {activeIncidents.length > 0 && (
+                      <button
+                        onClick={clearAllIncidents}
+                        className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-red-400 transition-colors"
+                        data-testid="clear-incidents-btn"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        Clear all
+                      </button>
+                    )}
+                    <MaxBtn panel="incidents" />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-2 flex-1 min-h-0">
+                <LiveIncidentFeed
+                  incidents={displayIncidents}
+                  onAlert={initiateRobocalls}
+                  onAnalyze={analyzeRisk}
+                  onFlag={(id) => setFlaggedIncidentIds(prev => [...prev, id])}
+                />
+              </CardContent>
+            </Card>
+
+            {/* Flagged For Review */}
+            <Card className="bg-slate-900/50 border-slate-800 overflow-hidden flex flex-col shrink-0 h-[150px]">
+              <CardHeader className="py-2 px-3 shrink-0 border-b border-slate-800/50">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-[11px] font-bold text-slate-300 uppercase tracking-widest flex items-center gap-2 border-l-2 border-yellow-500 pl-2">
+                    <span className="text-yellow-500 text-sm mt-[-4px]">⚑</span>
+                    Flagged For Review
+                    {flaggedIncidents.length > 0 && (
+                      <span className="text-yellow-500 text-[10px] font-normal normal-case ml-1">({flaggedIncidents.length})</span>
+                    )}
+                  </CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="p-2 flex-1 min-h-0 overflow-y-auto space-y-2">
+                {flaggedIncidents.map(incident => (
+                  <div key={incident.id} className="p-3 rounded-lg border border-yellow-900/40 bg-yellow-950/10 hover:bg-yellow-950/20 transition-colors flex flex-col gap-2 relative overflow-hidden group">
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-yellow-600/50 group-hover:bg-yellow-500 transition-colors" />
+                    <div className="flex items-start justify-between pl-1">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <Badge className="bg-yellow-600 hover:bg-yellow-500 text-[9px] px-1.5 py-0 rounded text-black font-bold uppercase tracking-wider">{incident.severity}</Badge>
+                          <span className="text-[9px] text-yellow-500/80 uppercase tracking-widest font-semibold border-b border-yellow-500/30 pb-[1px]">Under Review</span>
+                        </div>
+                        <div className="text-[13px] font-semibold text-slate-200 mt-1">{incident.title}</div>
+                        <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-1.5">
+                          <MapPin className="h-3 w-3" /> {incident.location || "Unassigned"}
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1.5 shrink-0">
+                        <Button
+                          size="sm"
+                          className="h-6 text-[10px] bg-emerald-700/80 hover:bg-emerald-600 text-white border border-emerald-600/50 rounded px-3"
+                          onClick={() => setFlaggedIncidentIds(prev => prev.filter(id => id !== incident.id))}
+                        >
+                          Return to Live
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 text-[10px] border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded justify-start px-2"
+                          onClick={async () => {
+                            try {
+                              await apiRequest("PATCH", `/api/incidents/${incident.id}`, { status: "resolved" });
+                              setFlaggedIncidentIds(prev => prev.filter(id => id !== incident.id));
+                              queryClient.invalidateQueries({ queryKey: ["/api/incidents"] });
+                            } catch { }
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3 mr-1.5" />
+                          Discard
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {flaggedIncidents.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-8 text-slate-500">
+                    <CheckCircle2 className="h-8 w-8 mb-2 opacity-30" />
+                    <p className="text-sm">No flagged items</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </section>
       </main>
     </div>
